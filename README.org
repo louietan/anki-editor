@@ -1,0 +1,23 @@
+anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
+
+* Requirements
+- [[https://github.com/FooSoft/anki-connect#installation][anki-connect]],
+  an Anki add-on which is required for this package to interact with
+  Anki.
+- curl
+
+* Usage
+1. Download it and put it into your Emacs' =load-path=
+2. =(require 'anki-editor)=
+3. Write notes in org syntax, e.g. [[./examples.org][examples.org]]
+   - Headings of deck are tagged with =deck=
+   - Headings of note are tagged with =note=
+   - Custom properties of a note heading can be used to specify note type and tags
+   - Subheadings of a note heading are field names
+   - The content of a field heading is the text of this field
+4. Have a look at the commands listed below, they might be helpful on note creation/editing
+   - =anki-editor-submit= :: Send notes in current buffer to Anki
+   - =anki-editor-setup-default-keybindings= :: Setup default keybindings (all keys are prefixed with =C-c a=)
+
+** Demo
+[[./demo.gif]]
