@@ -91,8 +91,8 @@
           (newline-and-indent)))))))
 
 (setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
-                             (,(kbd "C-c a d") . ,#'anki-editor-insert-deck)
-                             (,(kbd "C-c a n") . ,#'anki-editor-insert-note)))
+                             (,(kbd "C-c a i d") . ,#'anki-editor-insert-deck)
+                             (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)))
 
 (defun anki-editor-setup-default-keybindings ()
   (interactive)
