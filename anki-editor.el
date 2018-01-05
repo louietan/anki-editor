@@ -51,8 +51,20 @@
          (let ((failed (seq-count #'null result)))
            (message (format "Submitted %d notes, %d successful, %d failed." total (- total failed) failed))))))))
 
+(defun anki-editor-insert-deck ()
+  (interactive)
+  (message "Fetching...")
+  (anki-editor--anki-connect-invoke
+   "deckNames" 5 nil
+   (lambda (result)
+     (setq result (append (sort result #'string-lessp) nil))
+     (insert (completing-read "Choose a deck: " result))
+     (org-set-tags-to anki-editor-deck-tag)
+     (org-fix-tags-on-the-fly))))
 
-(setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)))
+
+(setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
+                             (,(kbd "C-c a d") . ,#'anki-editor-insert-deck)))
 
 (defun anki-editor-setup-default-keybindings ()
   (interactive)
