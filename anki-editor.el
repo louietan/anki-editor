@@ -53,18 +53,46 @@
 
 (defun anki-editor-insert-deck ()
   (interactive)
-  (message "Fetching...")
+  (message "Fetching decks...")
   (anki-editor--anki-connect-invoke
    "deckNames" 5 nil
    (lambda (result)
      (setq result (append (sort result #'string-lessp) nil))
      (insert (completing-read "Choose a deck: " result))
-     (org-set-tags-to anki-editor-deck-tag)
-     (org-fix-tags-on-the-fly))))
+     (anki-editor--set-tags-fix anki-editor-deck-tag))))
 
+(defun anki-editor-insert-note ()
+  (interactive)
+  (message "Fetching note types...")
+  (anki-editor--anki-connect-invoke
+   "modelNames" 5 nil
+   (lambda (note-types)
+     (let (note-type note-heading)
+       (setq note-types (append (sort note-types #'string-lessp) nil)
+             note-type (completing-read "Choose a note type: " note-types))
+       (message "Fetching note fields...")
+       (anki-editor--anki-connect-invoke
+        "modelFieldNames" 5 `((modelName . ,note-type))
+        (lambda (fields)
+          (setq fields (append (reverse fields) nil)
+                note-heading (read-from-minibuffer "Enter the heading: " "Item"))
+          (org-insert-subheading nil)
+          (insert note-heading)
+          (anki-editor--set-tags-fix anki-editor-note-tag)
+          (org-set-property (substring (symbol-name anki-editor-note-type-prop) 1) note-type)
+          (org-next-visible-heading 1)
+          (end-of-line 0)
+          (dolist (field fields)
+            (save-excursion
+              (org-insert-subheading nil)
+              (insert field)))
+          (org-next-visible-heading 1)
+          (end-of-line)
+          (newline-and-indent)))))))
 
 (setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
-                             (,(kbd "C-c a d") . ,#'anki-editor-insert-deck)))
+                             (,(kbd "C-c a d") . ,#'anki-editor-insert-deck)
+                             (,(kbd "C-c a n") . ,#'anki-editor-insert-note)))
 
 (defun anki-editor-setup-default-keybindings ()
   (interactive)
@@ -189,6 +217,10 @@
          (if (funcall test parent)
              parent
            (anki-editor--find-ancestor parent test)))))
+
+(defun anki-editor--set-tags-fix (tags)
+  (org-set-tags-to tags)
+  (org-fix-tags-on-the-fly))
 
 ;; anki-connect
 
