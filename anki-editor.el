@@ -58,6 +58,7 @@
    "deckNames" 5 nil
    (lambda (result)
      (setq result (append (sort result #'string-lessp) nil))
+     (org-insert-heading-respect-content)
      (insert (completing-read "Choose a deck: " result))
      (anki-editor--set-tags-fix anki-editor-deck-tag))))
 
@@ -74,18 +75,18 @@
        (anki-editor--anki-connect-invoke
         "modelFieldNames" 5 `((modelName . ,note-type))
         (lambda (fields)
-          (setq fields (append (reverse fields) nil)
-                note-heading (read-from-minibuffer "Enter the heading: " "Item"))
-          (org-insert-subheading nil)
+          (setq note-heading (read-from-minibuffer "Enter the heading: " "Item"))
+          (org-insert-heading-respect-content)
+          (org-do-demote)
           (insert note-heading)
           (anki-editor--set-tags-fix anki-editor-note-tag)
           (org-set-property (substring (symbol-name anki-editor-note-type-prop) 1) note-type)
-          (org-next-visible-heading 1)
-          (end-of-line 0)
-          (dolist (field fields)
-            (save-excursion
-              (org-insert-subheading nil)
-              (insert field)))
+          (seq-each (lambda (field)
+                      (save-excursion
+                        (org-insert-heading-respect-content)
+                        (org-do-demote)
+                        (insert field)))
+                    fields)
           (org-next-visible-heading 1)
           (end-of-line)
           (newline-and-indent)))))))
