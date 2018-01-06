@@ -28,6 +28,7 @@
 (defconst anki-editor-deck-tag "deck")
 (defconst anki-editor-note-type-prop :ANKI_NOTE_TYPE)
 (defconst anki-editor-note-tags-prop :ANKI_TAGS)
+(defconst anki-editor-html-output-buffer-name "*anki-editor html output*")
 (defconst anki-editor-anki-connect-listening-address "127.0.0.1")
 (defconst anki-editor-anki-connect-listening-port "8765")
 
@@ -91,9 +92,25 @@
           (end-of-line)
           (newline-and-indent)))))))
 
+(defun anki-editor-export-heading-contents-to-html ()
+  (interactive)
+  (let ((tree (org-element-at-point))
+        contents)
+    (if (or (null tree)
+            (not (eq (org-element-type tree) 'headline)))
+        (error "No element at point or it's not a heading")
+
+      (setq contents (buffer-substring-no-properties (org-element-property :contents-begin tree)
+                                                     (org-element-property :contents-end tree)))
+      (when (buffer-live-p (get-buffer anki-editor-html-output-buffer-name))
+        (kill-buffer anki-editor-html-output-buffer-name))
+      (switch-to-buffer-other-window (get-buffer-create anki-editor-html-output-buffer-name))
+      (insert (anki-editor--generate-html contents)))))
+
 (setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
                              (,(kbd "C-c a i d") . ,#'anki-editor-insert-deck)
-                             (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)))
+                             (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)
+                             (,(kbd "C-c a e") . ,#'anki-editor-export-heading-contents-to-html)))
 
 (defun anki-editor-setup-default-keybindings ()
   (interactive)
