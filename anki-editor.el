@@ -238,7 +238,7 @@ note type."
 ;; Utilities
 
 (defun anki-editor--hash (type text)
-  (format "%s-%s" (symbol-name type) (sha1 text)))
+  (sha1 (format "%s %s" (symbol-name type) text)))
 
 (defun anki-editor--find-ancestor (element test)
   (let ((parent (org-element-property :parent element)))
