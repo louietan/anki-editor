@@ -121,6 +121,14 @@ note type."
       (switch-to-buffer-other-window (get-buffer-create anki-editor-html-output-buffer-name))
       (insert (anki-editor--generate-html contents)))))
 
+;;;###autoload
+(defun anki-editor-convert-region-to-html ()
+  "Convert and replace region to HTML."
+  (interactive)
+  (unless (region-active-p) (error "No active region"))
+  (insert (anki-editor--generate-html
+           (delete-and-extract-region (region-beginning) (region-end)))))
+
 (setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
                              (,(kbd "C-c a i d") . ,#'anki-editor-insert-deck)
                              (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)
