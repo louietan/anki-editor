@@ -34,6 +34,7 @@
 
 ;; Commands
 
+;;;###autoload
 (defun anki-editor-submit ()
   "Send notes in current buffer to Anki."
   (interactive)
@@ -53,6 +54,7 @@
          (let ((failed (seq-count #'null result)))
            (message (format "Submitted %d notes, %d successful, %d failed." total (- total failed) failed))))))))
 
+;;;###autoload
 (defun anki-editor-insert-deck (&optional prefix)
   "Insert a deck heading with the same level as current heading.
 With prefix, only insert the deck name."
@@ -68,6 +70,7 @@ With prefix, only insert the deck name."
        (insert deckname)
        (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag))))))
 
+;;;###autoload
 (defun anki-editor-insert-note ()
   "Insert a note heading that's one level lower to current heading.
 The inserted heading will be structured with the property drawer
@@ -101,6 +104,7 @@ note type."
           (end-of-line)
           (newline-and-indent)))))))
 
+;;;###autoload
 (defun anki-editor-export-heading-contents-to-html ()
   "Export the contents of the heading at point to HTML."
   (interactive)
@@ -122,6 +126,7 @@ note type."
                              (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)
                              (,(kbd "C-c a e") . ,#'anki-editor-export-heading-contents-to-html)))
 
+;;;###autoload
 (defun anki-editor-setup-default-keybindings ()
   "Set up the default keybindings."
   (interactive)
