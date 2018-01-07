@@ -52,16 +52,16 @@
          (let ((failed (seq-count #'null result)))
            (message (format "Submitted %d notes, %d successful, %d failed." total (- total failed) failed))))))))
 
-(defun anki-editor-insert-deck ()
-  (interactive)
+(defun anki-editor-insert-deck (&optional prefix)
+  (interactive "P")
   (message "Fetching decks...")
   (anki-editor--anki-connect-invoke
    "deckNames" 5 nil
    (lambda (result)
      (setq result (append (sort result #'string-lessp) nil))
-     (org-insert-heading-respect-content)
+     (unless prefix (org-insert-heading-respect-content))
      (insert (completing-read "Choose a deck: " result))
-     (anki-editor--set-tags-fix anki-editor-deck-tag))))
+     (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag)))))
 
 (defun anki-editor-insert-note ()
   (interactive)
