@@ -61,10 +61,12 @@ With prefix, only insert the deck name."
   (anki-editor--anki-connect-invoke
    "deckNames" 5 nil
    (lambda (result)
-     (setq result (append (sort result #'string-lessp) nil))
-     (unless prefix (org-insert-heading-respect-content))
-     (insert (completing-read "Choose a deck: " result))
-     (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag)))))
+     (let (deckname)
+       (setq result (append (sort result #'string-lessp) nil)
+             deckname (completing-read "Choose a deck: " result))
+       (unless prefix (org-insert-heading-respect-content))
+       (insert deckname)
+       (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag))))))
 
 (defun anki-editor-insert-note ()
   "Insert a note heading that's one level lower to current heading.
