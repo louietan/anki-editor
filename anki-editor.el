@@ -67,7 +67,7 @@ With prefix, only insert the deck name."
      (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag)))))
 
 (defun anki-editor-insert-note ()
-  "Insert a note heading with the same level as current heading.
+  "Insert a note heading that's one level lower to current heading.
 The inserted heading will be structured with the property drawer
 and subheadings that correspond to the fields of the selected
 note type."
