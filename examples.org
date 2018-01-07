@@ -1,62 +1,63 @@
 * English                                                              :deck:
+
 ** Vocabulary
-*** Item                                                             :note:
-:PROPERTIES:
-:ANKI_NOTE_TYPE: Basic (and reversed card)
-:ANKI_TAGS: vocab idioms
-:END:
+
+*** Item                                                               :note:
+    :PROPERTIES:
+    :ANKI_NOTE_TYPE: Basic (and reversed card)
+    :ANKI_TAGS: vocab idioms
+    :END:
+
 **** Front
-(it's) raining cats and dogs
+
+     (it's) raining cats and dogs
+
 **** Back
-it's raining very hard
-** Grammar
-*** Item                                                             :note:
-:PROPERTIES:
-:ANKI_NOTE_TYPE: Basic
-:ANKI_TAGS: grammar
-:END:
-**** Front
-列举最基本的句型
-**** Back
-#+BEGIN_EXPORT html
-<div align="left">
-#+END_EXPORT
-- S + V
-- S + V + O
-- S + V + C
-- S + V + O + O
-- S + V + O + C
-#+BEGIN_EXPORT html
-</div>
-#+END_EXPORT
-* Math                                                                 :deck:
-** Fact                                                               :note:
-:PROPERTIES:
-:ANKI_NOTE_TYPE: Cloze
-:END:
-*** Text
-The square function is {{c1::$f(x) = x^2$}}
-* Computer Science                                                     :deck:
-** Item                                                               :note:
-:PROPERTIES:
-:ANKI_NOTE_TYPE: Basic
-:ANKI_TAGS: lisp emacs programming
-:END:
+
+     it's raining very hard
+
+* Computing                                                            :deck:
+
+** Item                                                                :note:
+   :PROPERTIES:
+   :ANKI_NOTE_TYPE: Basic
+   :ANKI_TAGS: lisp emacs programming
+   :END:
+
 *** Front
-How to trap errors in elisp ?
+
+    How to trap errors in elisp ?
+
 *** Back
-#+BEGIN_EXPORT html
-<div align="left">
-#+END_EXPORT
-#+BEGIN_SRC emacs-lisp
-  (condition-case the-error
-      ;; protected form
-      (progn
-        (do-something-dangerous))
-    ;; error handlers
-    (error-symbol-1 (handler1 err))
-    ((error-symbol-2 error-symbol-3) (handler2 err)))
-#+END_SRC
-#+BEGIN_EXPORT html
-</div>
-#+END_EXPORT
+
+    #+BEGIN_EXPORT html
+    <div align="left">
+    #+END_EXPORT
+
+    #+BEGIN_SRC emacs-lisp
+      (condition-case the-error
+          ;; the protected form
+          (progn
+            (do-something-dangerous)
+            (do-something-more-dangerous))
+        ;; handlers
+        (error-symbol1 (handler1 the-error))
+        ((error-symbol2 error-symbol3 (handler the-error))))
+    #+END_SRC
+
+    #+BEGIN_EXPORT html
+    </div>
+    #+END_EXPORT
+
+* Mathematics                                                          :deck:
+
+** Item                                                                :note:
+   :PROPERTIES:
+   :ANKI_NOTE_TYPE: Cloze
+   :END:
+
+*** Text
+
+    The dot product of two vectors is {{c1::$|\alpha| \cdot |\beta| \cos{\varphi}$}}
+
+*** Extra
