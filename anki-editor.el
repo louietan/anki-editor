@@ -35,6 +35,7 @@
 ;; Commands
 
 (defun anki-editor-submit ()
+  "Send notes in current buffer to Anki."
   (interactive)
   (let* ((tree (org-element-parse-buffer))
          (note-headings (anki-editor--get-note-headings tree))
@@ -53,6 +54,8 @@
            (message (format "Submitted %d notes, %d successful, %d failed." total (- total failed) failed))))))))
 
 (defun anki-editor-insert-deck (&optional prefix)
+  "Insert a deck heading with the same level as current heading.
+With prefix, only insert the deck name."
   (interactive "P")
   (message "Fetching decks...")
   (anki-editor--anki-connect-invoke
@@ -64,6 +67,10 @@
      (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag)))))
 
 (defun anki-editor-insert-note ()
+  "Insert a note heading with the same level as current heading.
+The inserted heading will be structured with the property drawer
+and subheadings that correspond to the fields of the selected
+note type."
   (interactive)
   (message "Fetching note types...")
   (anki-editor--anki-connect-invoke
@@ -93,6 +100,7 @@
           (newline-and-indent)))))))
 
 (defun anki-editor-export-heading-contents-to-html ()
+  "Export the contents of the heading at point to HTML."
   (interactive)
   (let ((tree (org-element-at-point))
         contents)
@@ -113,6 +121,7 @@
                              (,(kbd "C-c a e") . ,#'anki-editor-export-heading-contents-to-html)))
 
 (defun anki-editor-setup-default-keybindings ()
+  "Set up the default keybindings."
   (interactive)
   (dolist (map anki-editor--key-map)
     (local-set-key (car map) (cdr map)))
