@@ -208,19 +208,19 @@ note type."
      (org-html-convert-region-to-html))))
 
 (defun anki-editor--replace-latex ()
-  (let (object)
+  (let (object type memo)
     (while (setq object (org-element-map
                             (org-element-parse-buffer)
-                            'latex-fragment 'identity nil t))
-      (let (begin end latex hash)
-        (setq begin (org-element-property :begin object)
-              end (- (org-element-property :end object) (org-element-property :post-blank object))
-              latex (delete-and-extract-region begin end))
-        (goto-char begin)
-        (insert (setq hash (anki-editor--hash 'latex-fragment latex)))
-        (add-to-list 'anki-editor--replacement-records
-                     `(,hash . ((type . latex-fragment)
-                                (original . ,latex))))))))
+                            '(latex-fragment latex-environment) 'identity nil t))
+
+      (setq type (org-element-type object)
+            memo (anki-editor--replace-node object
+                                            (lambda (original)
+                                              (anki-editor--hash type
+                                                                 original))))
+      (add-to-list 'anki-editor--replacement-records
+                   `(,(cdr memo) . ((type . ,type)
+                                    (original . ,(car memo))))))))
 
 (setq anki-editor--anki-latex-syntax-map
       `((,(format "^%s" (regexp-quote "$$")) . "[$$]")
@@ -232,21 +232,28 @@ note type."
         (,(format "^%s" (regexp-quote "\\[")) . "[$$]")
         (,(format "%s$" (regexp-quote "\\]")) . "[/$$]")))
 
-(defun anki-editor--translate-latex-to-anki-syntax (latex)
-  (dolist (map anki-editor--anki-latex-syntax-map)
-    (setq latex (replace-regexp-in-string (car map) (cdr map) latex t t)))
-  latex)
+(defun anki-editor--wrap-latex (content)
+  (format "[latex]%s[/latex]" content))
+
+(defun anki-editor--convert-latex-fragment (frag)
+  (let ((copy frag))
+    (dolist (map anki-editor--anki-latex-syntax-map)
+      (setq frag (replace-regexp-in-string (car map) (cdr map) frag t t)))
+    (if (equal copy frag)
+        (anki-editor--wrap-latex frag)
+      frag)))
 
 (defun anki-editor--translate-latex ()
-  (dolist (stash anki-editor--replacement-records)
-    (goto-char (point-min))
-    (let ((hash (car stash))
-          (value (cdr stash)))
-      (when (eq 'latex-fragment (alist-get 'type value))
-        (when (search-forward hash nil t)
-          (replace-match (anki-editor--translate-latex-to-anki-syntax
-                          (alist-get 'original value))
-                         t t))))))
+  (let (ele-data translated)
+    (dolist (record anki-editor--replacement-records)
+      (setq ele-data (cdr record))
+      (goto-char (point-min))
+      (when (search-forward (car record) nil t)
+        (pcase (alist-get 'type ele-data)
+          ('latex-fragment (replace-match (anki-editor--convert-latex-fragment (alist-get 'original ele-data)) t t))
+          ('latex-environment (replace-match (anki-editor--wrap-latex (alist-get 'original ele-data)) t t)))
+        (add-to-list 'translated record)))
+    (setq anki-editor--replacement-records (cl-set-difference anki-editor--replacement-records translated))))
 
 ;; Utilities
 
@@ -263,6 +270,15 @@ note type."
 (defun anki-editor--set-tags-fix (tags)
   (org-set-tags-to tags)
   (org-fix-tags-on-the-fly))
+
+(defun anki-editor--replace-node (node replacer)
+  (let* ((begin (org-element-property :begin node))
+         (end (- (org-element-property :end node) (org-element-property :post-blank node)))
+         (original (delete-and-extract-region begin end))
+         (replacement (funcall replacer original)))
+    (goto-char begin)
+    (insert replacement)
+    (cons original replacement)))
 
 ;; anki-connect
 

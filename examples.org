@@ -51,7 +51,7 @@
 
 * Mathematics                                                          :deck:
 
-** Item                                                                :note:
+** Item1                                                               :note:
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Cloze
    :END:
@@ -61,3 +61,23 @@
     The dot product of two vectors is {{c1::$|\alpha| \cdot |\beta| \cos{\varphi}$}}
 
 *** Extra
+
+** Item2                                                               :note:
+   :PROPERTIES:
+   :ANKI_NOTE_TYPE: Basic
+   :END:
+
+*** Front
+
+    Given two vectors:
+
+    \begin{equation*}
+    \alpha = \{a_1, a_2, a_3\}, \beta = \{b_1, b_2, b_3\}
+    \end{equation*}
+
+
+    What's the result of $\alpha \cdot \beta$ ?
+
+*** Back
+
+    \[a_1b_1 + a_2b_2 + a_3b_3\]

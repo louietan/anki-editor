@@ -15,8 +15,8 @@ anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
        type and tags
      - Subheadings of a note heading are fields of its note type
      - The contents of field headings will be converted to html by
-       org-mode's html backend, with the latex fragment translated to
-       the Anki syntax
+       org-mode's html backend, with the latex syntax translated to
+       the Anki style
   4. Command Cheat Sheet
      | Command                                       | Default Keybinding | Description                                                                                                                                                                                                |
      |-----------------------------------------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
