@@ -28,6 +28,7 @@
 (defconst anki-editor-deck-tag "deck")
 (defconst anki-editor-note-type-prop :ANKI_NOTE_TYPE)
 (defconst anki-editor-note-tags-prop :ANKI_TAGS)
+(defconst anki-editor-note-id-prop :ANKI_NOTE_ID)
 (defconst anki-editor-html-output-buffer-name "*anki-editor html output*")
 (defconst anki-editor-anki-connect-listening-address "127.0.0.1")
 (defconst anki-editor-anki-connect-listening-port "8765")
@@ -154,28 +155,19 @@ note type."
           element)))))
 
 (defun anki-editor--heading-to-note (heading)
-  (let (deck note-type tags fields)
-    (setq deck (anki-editor--get-deck-name heading)
+  (let (note-id note-type tags fields)
+    (setq note-id (org-element-property anki-editor-note-id-prop heading)
           note-type (org-element-property anki-editor-note-type-prop heading)
           tags (org-element-property anki-editor-note-tags-prop heading)
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
-    (unless deck (error "Please specify a deck !"))
     (unless note-type (error "Please specify a note type !"))
     (unless fields (error "Please specify fields !"))
 
-    `((deck . ,deck)
+    `((note-id . ,(string-to-number (or note-id "-1")))
       (note-type . ,note-type)
       (tags . ,(and tags (split-string tags " ")))
       (fields . ,fields))))
-
-(defun anki-editor--get-deck-name (element)
-  (let ((ancestor (anki-editor--find-ancestor
-                   element
-                   (lambda (it)
-                     (member anki-editor-deck-tag (org-element-property :tags it))))))
-    (and ancestor
-         (substring-no-properties (org-element-property :raw-value ancestor)))))
 
 (defun anki-editor--get-subheadings (heading)
   (org-element-map (org-element-contents heading)
@@ -260,13 +252,6 @@ note type."
 (defun anki-editor--hash (type text)
   (sha1 (format "%s %s" (symbol-name type) text)))
 
-(defun anki-editor--find-ancestor (element test)
-  (let ((parent (org-element-property :parent element)))
-    (and parent
-         (if (funcall test parent)
-             parent
-           (anki-editor--find-ancestor parent test)))))
-
 (defun anki-editor--set-tags-fix (tags)
   (org-set-tags-to tags)
   (org-fix-tags-on-the-fly))
@@ -282,7 +267,8 @@ note type."
 
 ;; anki-connect
 
-(defun anki-editor--anki-connect-invoke (action version &optional params success)
+;; FIXME: behavior changed, callers need to be updated
+(defun anki-editor--anki-connect-invoke (action version &optional params)
   (let* ((data `(("action" . ,action)
                  ("version" . ,version)))
          (request-body (json-encode
@@ -301,18 +287,18 @@ note type."
                               anki-editor-anki-connect-listening-address
                               anki-editor-anki-connect-listening-port
                               request-tempfile)))
-           anki-error)
+           error)
       (when (file-exists-p request-tempfile) (delete-file request-tempfile))
       (condition-case err
-          (progn
-            (setq response (json-read-from-string response)
-                  anki-error (alist-get 'error response))
-            (when anki-error (error "anki-connect responded with error: %s" anki-error))
-            (when success (funcall success (alist-get 'result response))))
-        (error (message "%s" (error-message-string err)))))))
+          (setq response (json-read-from-string response)
+                error (alist-get 'error response))
+        (error (setq error (error-message-string err))))
+      `((result . ,(alist-get 'result response))
+        (error . ,error)))))
 
 (defun anki-editor--anki-connect-map-note (note)
-  `(("deckName" . ,(alist-get 'deck note))
+  `(("id" . ,(alist-get 'note-id note))
+    ("deckName" . ,(alist-get 'deck note))
     ("modelName" . ,(alist-get 'note-type note))
     ("fields" . ,(alist-get 'fields note))
     ;; Convert tags to a vector since empty list is identical to nil
@@ -324,6 +310,62 @@ note type."
   (anki-editor--anki-connect-map-note
    (anki-editor--heading-to-note heading)))
 
+
+;;; experimental code
+
+(global-set-key (kbd "C-c a t") #'anki-editor--better-submit)
+
+(defun anki-editor--better-submit ()
+  (interactive)
+  (let ((total 0)
+        (failed 0))
+    (save-excursion
+      (goto-char (point-min))
+      (let (current-tags current-deck current-note-elem current-note)
+        (while (not (= (point) (point-max)))
+          (when (org-at-heading-p)
+            (setq current-tags (org-get-tags))
+            (cond
+             ((member anki-editor-deck-tag current-tags) (setq current-deck (nth 4 (org-heading-components))))
+             ((member anki-editor-note-tag current-tags) (progn
+                                                           ;; TODO: Put the error reason in property drawer
+                                                           ;; (unless current-deck (error "Please specify a deck !"))
+                                                           (setq current-note-elem (org-element-at-point)
+                                                                 current-note-elem
+                                                                 (let ((content (buffer-substring
+                                                                                 (org-element-property :begin current-note-elem)
+                                                                                 (org-element-property :end current-note-elem))))
+                                                                   (with-temp-buffer
+                                                                     (insert content)
+                                                                     (car (org-element-contents (org-element-parse-buffer)))))
+                                                                 ;; TODO: trap errors
+                                                                 current-note (anki-editor--heading-to-note current-note-elem))
+                                                           (add-to-list 'current-note `(deck . ,current-deck))
+                                                           (setq total (1+ total))
+                                                           (when (not (anki-editor--anki-connect-save-note current-note))
+                                                             (setq failed (1+ failed)))))))
+          (org-next-visible-heading 1))))
+    (message "Submitted %d notes, with %d failed." total failed)))
+
+(defun anki-editor--anki-connect-save-note (note)
+  ;; TODO: Put error in property drawer
+  (if (= (alist-get 'note-id note) -1)
+      (anki-editor--anki-connect-create-note note)
+    (anki-editor--anki-connect-update-note note)))
+
+(defun anki-editor--anki-connect-create-note (note)
+  (let ((response (anki-editor--anki-connect-invoke
+                   "addNote" 5 `((note . ,(anki-editor--anki-connect-map-note note))))))
+    (when (alist-get 'result response)
+      (org-set-property (substring (symbol-name anki-editor-note-id-prop) 1)
+                        (format "%d" (alist-get 'result response))))
+    (alist-get 'result response)))
+
+(defun anki-editor--anki-connect-update-note (note)
+  (let ((response (anki-editor--anki-connect-invoke
+                   "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note))))))
+    ;; TODO: Update tags
+    (not (alist-get 'error response))))
 
 (provide 'anki-editor)
 
