@@ -77,15 +77,15 @@ of that heading."
 With prefix, only insert the deck name."
   (interactive "P")
   (message "Fetching decks...")
-  (anki-editor--anki-connect-invoke
-   "deckNames" 5 nil
-   (lambda (result)
-     (let (deckname)
-       (setq result (append (sort result #'string-lessp) nil)
-             deckname (completing-read "Choose a deck: " result))
-       (unless prefix (org-insert-heading-respect-content))
-       (insert deckname)
-       (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag))))))
+  (let* ((response (anki-editor--anki-connect-invoke "deckNames" 5))
+         (err (alist-get 'error response))
+         result deckname)
+    (when err (error "Error fetching deck names: %s" err))
+    (setq result (append (sort (alist-get 'result response) #'string-lessp) nil)
+          deckname (completing-read "Choose a deck: " result))
+    (unless prefix (org-insert-heading-respect-content))
+    (insert deckname)
+    (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag))))
 
 ;;;###autoload
 (defun anki-editor-insert-note ()
@@ -95,31 +95,32 @@ and subheadings that correspond to the fields of the selected
 note type."
   (interactive)
   (message "Fetching note types...")
-  (anki-editor--anki-connect-invoke
-   "modelNames" 5 nil
-   (lambda (note-types)
-     (let (note-type note-heading)
-       (setq note-types (append (sort note-types #'string-lessp) nil)
-             note-type (completing-read "Choose a note type: " note-types))
-       (message "Fetching note fields...")
-       (anki-editor--anki-connect-invoke
-        "modelFieldNames" 5 `((modelName . ,note-type))
-        (lambda (fields)
-          (setq note-heading (read-from-minibuffer "Enter the heading: " "Item"))
-          (org-insert-heading-respect-content)
-          (org-do-demote)
-          (insert note-heading)
-          (anki-editor--set-tags-fix anki-editor-note-tag)
-          (org-set-property (substring (symbol-name anki-editor-note-type-prop) 1) note-type)
-          (seq-each (lambda (field)
-                      (save-excursion
-                        (org-insert-heading-respect-content)
-                        (org-do-demote)
-                        (insert field)))
-                    fields)
-          (org-next-visible-heading 1)
-          (end-of-line)
-          (newline-and-indent)))))))
+  (let* ((response (anki-editor--anki-connect-invoke "modelNames" 5))
+         (err (alist-get 'error response))
+         (note-types (alist-get 'result response))
+         note-type note-heading fields)
+
+    (when err (error "Error fetching note types: %s" err))
+    (setq note-types (append (sort note-types #'string-lessp) nil)
+          note-type (completing-read "Choose a note type: " note-types))
+    (message "Fetching note fields...")
+    (setq response (anki-editor--anki-connect-invoke "modelFieldNames" 5 `((modelName . ,note-type)))
+          fields (alist-get 'result response)
+          note-heading (read-from-minibuffer "Enter the heading: " "Item"))
+    (org-insert-heading-respect-content)
+    (org-do-demote)
+    (insert note-heading)
+    (anki-editor--set-tags-fix anki-editor-note-tag)
+    (org-set-property (substring (symbol-name anki-editor-note-type-prop) 1) note-type)
+    (seq-each (lambda (field)
+                (save-excursion
+                  (org-insert-heading-respect-content)
+                  (org-do-demote)
+                  (insert field)))
+              fields)
+    (org-next-visible-heading 1)
+    (end-of-line)
+    (newline-and-indent)))
 
 ;;;###autoload
 (defun anki-editor-export-heading-contents-to-html ()
@@ -320,7 +321,6 @@ note type."
 
 ;; anki-connect
 
-;; FIXME: behavior changed, callers need to be updated
 (defun anki-editor--anki-connect-invoke (action version &optional params)
   (let* ((data `(("action" . ,action)
                  ("version" . ,version)))
