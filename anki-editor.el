@@ -81,7 +81,7 @@ With prefix, only insert the deck name."
          (err (alist-get 'error response))
          result deckname)
     (when err (error "Error fetching deck names: %s" err))
-    (setq result (append (sort (alist-get 'result response) #'string-lessp) nil)
+    (setq result (sort (alist-get 'result response) #'string-lessp)
           deckname (completing-read "Choose a deck: " result))
     (unless prefix (org-insert-heading-respect-content))
     (insert deckname)
@@ -101,7 +101,7 @@ note type."
          note-type note-heading fields)
 
     (when err (error "Error fetching note types: %s" err))
-    (setq note-types (append (sort note-types #'string-lessp) nil)
+    (setq note-types (sort note-types #'string-lessp)
           note-type (completing-read "Choose a note type: " note-types))
     (message "Fetching note fields...")
     (setq response (anki-editor--anki-connect-invoke "modelFieldNames" 5 `((modelName . ,note-type)))
@@ -199,8 +199,20 @@ note type."
                     "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note)))))
          (err (alist-get 'error response)))
     (when err (error err))
-    ;; TODO: Update tags
-    ))
+    ;; update tags
+    (let (existing-note added-tags removed-tags)
+      (setq response (anki-editor--anki-connect-invoke "notesInfo" 5 `(("notes" . (,(alist-get 'note-id note)))))
+            err (alist-get 'error response))
+      (when err (error err))
+      (setq existing-note (car (alist-get 'result response))
+            added-tags (cl-set-difference (alist-get 'tags note) (alist-get 'tags existing-note) :test #'string-equal)
+            removed-tags (cl-set-difference (alist-get 'tags existing-note) (alist-get 'tags note) :test #'string-equal))
+      (when added-tags
+        (anki-editor--anki-connect-invoke "addTags" 5 `(("notes" . (,(alist-get 'note-id note)))
+                                                        ("tags" . ,(mapconcat #'identity added-tags " ")))))
+      (when removed-tags
+        (anki-editor--anki-connect-invoke "removeTags" 5 `(("notes" . (,(alist-get 'note-id note)))
+                                                           ("tags" . ,(mapconcat #'identity removed-tags " "))))))))
 
 (defun anki-editor--set-failure-reason (reason)
   (org-set-property (substring (symbol-name anki-editor-note-failure-reason-prop) 1) reason))
@@ -341,10 +353,12 @@ note type."
                               anki-editor-anki-connect-listening-port
                               request-tempfile)))
            resp error)
+
       (when (file-exists-p request-tempfile) (delete-file request-tempfile))
       (condition-case err
-          (setq resp (json-read-from-string raw-resp)
-                error (alist-get 'error resp))
+          (let ((json-array-type 'list))
+            (setq resp (json-read-from-string raw-resp)
+                  error (alist-get 'error resp)))
         (error (setq error
                      (format "Unexpected error communicating with anki-connect: %s, the response was %s"
                              (error-message-string err)
