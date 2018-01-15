@@ -89,10 +89,9 @@ With prefix, only insert the deck name."
 
 ;;;###autoload
 (defun anki-editor-insert-note ()
-  "Insert a note heading that's one level lower to current heading.
-The inserted heading will be structured with the property drawer
-and subheadings that correspond to the fields of the selected
-note type."
+  "Insert the skeleton of a note, which is structured with a note
+heading one level lower to the current one as well as subheadings
+that correspond to fields."
   (interactive)
   (message "Fetching note types...")
   (let* ((response (anki-editor--anki-connect-invoke "modelNames" 5))
