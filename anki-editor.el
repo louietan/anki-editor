@@ -1,40 +1,57 @@
-;;; anki-editor.el --- Create Anki cards in Org-mode  -*- lexical-binding: t; -*-
-
-;; Copyright (C) 2018  Louie Tan
-
-;; Author: Louie Tan <louietanlei@gmail.com>
-
-;; This file is not part of GNU Emacs.
-
-;; This program is free software; you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
+;;; anki-editor.el --- Create Anki Cards in Org-mode
 ;;
-;; This program is distaributed in the hope that it will be useful,
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;; GNU General Public License for more details.
+;; Copyright (C) 2018 Louie Tan <louietanlei@gmail.com>
+;;
+;; Filename: anki-editor.el
+;; Description: Create Anki Cards in Org-mode
+;; Author: Louie Tan
+;; Version: 0.1.0
+;; URL: https://github.com/louietan/anki-editor
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;; Commentary:
+;;
+;;  This package is for people who use Anki as SRS but would like to
+;;  create cards in Org-mode.  It does so by using Org-mode's built-in
+;;  HTML backend to generate HTML with specific syntax (e.g. latex)
+;;  translated to the Anki style, then sends requests to anki-connect
+;;  (an Anki addon that runs an HTTP server to expose Anki functions
+;;  as APIs).
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or (at
+;; your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful, but
+;; WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+;; General Public License for more details.
 ;;
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
+;; along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;; Code:
 
 (require 'json)
 (require 'org-element)
 
 
-(defconst anki-editor-note-tag "note")
-(defconst anki-editor-deck-tag "deck")
-(defconst anki-editor-note-type-prop :ANKI_NOTE_TYPE)
-(defconst anki-editor-note-tags-prop :ANKI_TAGS)
-(defconst anki-editor-note-id-prop :ANKI_NOTE_ID)
-(defconst anki-editor-note-failure-reason-prop :ANKI_FAILURE_REASON)
-(defconst anki-editor-html-output-buffer-name "*anki-editor html output*")
-(defconst anki-editor-anki-connect-listening-address "127.0.0.1")
-(defconst anki-editor-anki-connect-listening-port "8765")
+(defvar anki-editor-note-tag "note")
+(defvar anki-editor-deck-tag "deck")
+(defvar anki-editor-note-type-prop :ANKI_NOTE_TYPE)
+(defvar anki-editor-note-tags-prop :ANKI_TAGS)
+(defvar anki-editor-note-id-prop :ANKI_NOTE_ID)
+(defvar anki-editor-note-failure-reason-prop :ANKI_FAILURE_REASON)
+(defvar anki-editor-html-output-buffer-name "*anki-editor html output*")
+(defvar anki-editor-anki-connect-listening-address "127.0.0.1")
+(defvar anki-editor-anki-connect-listening-port "8765")
 
-;; Commands
 
 ;;;###autoload
 (defun anki-editor-submit ()
@@ -74,7 +91,7 @@ of that heading."
 ;;;###autoload
 (defun anki-editor-insert-deck (&optional prefix)
   "Insert a deck heading with the same level as current heading.
-With prefix, only insert the deck name."
+With PREFIX, only insert the deck name."
   (interactive "P")
   (message "Fetching decks...")
   (let* ((response (anki-editor--anki-connect-invoke "deckNames" 5))
@@ -89,8 +106,9 @@ With prefix, only insert the deck name."
 
 ;;;###autoload
 (defun anki-editor-insert-note ()
-  "Insert the skeleton of a note, which is structured with a note
-heading one level lower to the current one as well as subheadings
+  "Insert the skeleton of a note.
+The contents to be insrted are structured with a note heading
+that's one level lower to the current one as well as subheadings
 that correspond to fields."
   (interactive)
   (message "Fetching note types...")
@@ -164,7 +182,7 @@ that correspond to fields."
   "Upgrade anki-connect to the latest version.
 
 This will display a confirmation dialog box in Anki asking if you
-want to continue. The upgrading is done by downloading the latest
+want to continue.  The upgrading is done by downloading the latest
 code in the master branch of its Github repo.
 
 This is useful when new version of this package depends on the
@@ -177,7 +195,7 @@ bugfixes or new features of anki-connect."
     (when (and (booleanp result) result)
       (message "anki-connect has upgraded, you may have to restart Anki to make it in effect."))))
 
-;; Core Functions
+;;; Core Functions
 
 (defun anki-editor--process-note-heading (deck)
   (unless deck (error "No deck specified"))
@@ -210,7 +228,7 @@ bugfixes or new features of anki-connect."
       (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
 
 (defun anki-editor--update-note (note)
-  "Update fields and tags of a note."
+  "Update fields and tags of NOTE."
   (let* ((response (anki-editor--anki-connect-invoke
                     "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note)))))
          (err (alist-get 'error response)))
@@ -277,9 +295,9 @@ bugfixes or new features of anki-connect."
 
 (defun anki-editor--buffer-to-html ()
   (when (> (buffer-size) 0)
-    (save-mark-and-excursion
-     (mark-whole-buffer)
-     (org-html-convert-region-to-html))))
+    (insert
+     (org-export-string-as
+      (delete-and-extract-region (point-min) (point-max)) 'html t))))
 
 (defun anki-editor--replace-latex ()
   (let (object type memo)
@@ -329,7 +347,7 @@ bugfixes or new features of anki-connect."
         (add-to-list 'translated record)))
     (setq anki-editor--replacement-records (cl-set-difference anki-editor--replacement-records translated))))
 
-;; Utilities
+;;; Utilities
 
 (defun anki-editor--hash (type text)
   (sha1 (format "%s %s" (symbol-name type) text)))
@@ -347,7 +365,7 @@ bugfixes or new features of anki-connect."
     (insert replacement)
     (cons original replacement)))
 
-;; anki-connect
+;;; anki-connect
 
 (defun anki-editor--anki-connect-invoke (action version &optional params)
   (let* ((data `(("action" . ,action)
@@ -398,4 +416,5 @@ bugfixes or new features of anki-connect."
 
 (provide 'anki-editor)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; anki-editor.el ends here
