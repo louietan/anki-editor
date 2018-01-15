@@ -160,6 +160,23 @@ note type."
     (local-set-key (car map) (cdr map)))
   (message "anki-editor default keybindings have been set"))
 
+;;;###autoload
+(defun anki-editor-anki-connect-upgrade ()
+  "Upgrade anki-connect to the latest version.
+
+This will display a confirmation dialog box in Anki asking if you
+want to continue. The upgrading is done by downloading the latest
+code in the master branch of its Github repo.
+
+This is useful when new version of this package depends on the
+bugfixes or new features of anki-connect."
+  (interactive)
+  (let* ((response (anki-editor--anki-connect-invoke "upgrade" 5))
+         (result (alist-get 'result response))
+         (err (alist-get 'error response)))
+    (when err (error err))
+    (when (and (booleanp result) result)
+      (message "anki-connect has upgraded, you may have to restart Anki to make it in effect."))))
 
 ;; Core Functions
 
