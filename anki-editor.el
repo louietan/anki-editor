@@ -140,6 +140,16 @@ that correspond to fields."
     (newline-and-indent)))
 
 ;;;###autoload
+(defun anki-editor-insert-tags ()
+  "Insert a tag at point with autocompletion."
+  (interactive)
+  (let* ((response (anki-editor--anki-connect-invoke "getTags" 5))
+         (result (alist-get 'result response))
+         (err (alist-get 'error response)))
+    (when err (error err))
+    (while t (insert (format " %s" (completing-read "Choose a tag: " result))))))
+
+;;;###autoload
 (defun anki-editor-export-heading-contents-to-html ()
   "Export the contents of the heading at point to HTML."
   (interactive)
@@ -167,6 +177,7 @@ that correspond to fields."
 (setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
                              (,(kbd "C-c a i d") . ,#'anki-editor-insert-deck)
                              (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)
+                             (,(kbd "C-c a i t") . ,#'anki-editor-insert-tags)
                              (,(kbd "C-c a e") . ,#'anki-editor-export-heading-contents-to-html)))
 
 ;;;###autoload

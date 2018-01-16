@@ -57,6 +57,7 @@ anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
    | =anki-editor-submit=                          | C-c a s    | Send notes in current buffer to Anki.                         |
    | =anki-editor-insert-deck=                     | C-c a i d  | Insert a deck heading with the same level as current heading. |
    | =anki-editor-insert-note=                     | C-c a i n  | Insert the skeleton of a note.                                |
+   | =anki-editor-insert-tags=                     | C-c a i t  | Insert a tag at point with autocompletion.                    |
    | =anki-editor-export-heading-contents-to-html= | C-c a e    | Export the contents of the heading at point to HTML.          |
    | =anki-editor-convert-region-to-html=          | N/A        | Convert and replace region to HTML.                           |
    | =anki-editor-anki-connect-upgrade=            | N/A        | Upgrade anki-connect to the latest version.                   |
