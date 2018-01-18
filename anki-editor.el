@@ -42,15 +42,30 @@
 (require 'org-element)
 
 
-(defvar anki-editor-note-tag "note")
-(defvar anki-editor-deck-tag "deck")
-(defvar anki-editor-note-type-prop :ANKI_NOTE_TYPE)
-(defvar anki-editor-note-tags-prop :ANKI_TAGS)
-(defvar anki-editor-note-id-prop :ANKI_NOTE_ID)
-(defvar anki-editor-note-failure-reason-prop :ANKI_FAILURE_REASON)
-(defvar anki-editor-html-output-buffer-name "*anki-editor html output*")
-(defvar anki-editor-anki-connect-listening-address "127.0.0.1")
-(defvar anki-editor-anki-connect-listening-port "8765")
+(defconst anki-editor-prop-note-type :ANKI_NOTE_TYPE)
+(defconst anki-editor-prop-note-tags :ANKI_TAGS)
+(defconst anki-editor-prop-note-id :ANKI_NOTE_ID)
+(defconst anki-editor-prop-failure-reason :ANKI_FAILURE_REASON)
+(defconst anki-editor-buffer-html-output "*anki-editor HTML Output*")
+
+(defcustom anki-editor-note-tag
+  "note"
+  "Headings with this tag will be considered as notes."
+  :group 'anki-editor)
+(defcustom anki-editor-deck-tag
+  "deck"
+  "Headings with this tag will be considered as decks."
+  :group 'anki-editor)
+
+(defcustom anki-editor-anki-connect-listening-address
+  "127.0.0.1"
+  "The network address anki-connect is listening."
+  :group 'anki-editor)
+
+(defcustom anki-editor-anki-connect-listening-port
+  "8765"
+  "The port number anki-connect is listening."
+  :group 'anki-editor)
 
 
 ;;;###autoload
@@ -119,7 +134,7 @@ that correspond to fields."
     (org-do-demote)
     (insert note-heading)
     (anki-editor--set-tags-fix anki-editor-note-tag)
-    (org-set-property (substring (symbol-name anki-editor-note-type-prop) 1) note-type)
+    (org-set-property (substring (symbol-name anki-editor-prop-note-type) 1) note-type)
     (seq-each (lambda (field)
                 (save-excursion
                   (org-insert-heading-respect-content)
@@ -149,9 +164,9 @@ that correspond to fields."
 
       (setq contents (buffer-substring-no-properties (org-element-property :contents-begin tree)
                                                      (org-element-property :contents-end tree)))
-      (when (buffer-live-p (get-buffer anki-editor-html-output-buffer-name))
-        (kill-buffer anki-editor-html-output-buffer-name))
-      (switch-to-buffer-other-window (get-buffer-create anki-editor-html-output-buffer-name))
+      (when (buffer-live-p (get-buffer anki-editor-buffer-html-output))
+        (kill-buffer anki-editor-buffer-html-output))
+      (switch-to-buffer-other-window (get-buffer-create anki-editor-buffer-html-output))
       (insert (anki-editor--generate-html contents)))))
 
 ;;;###autoload
@@ -219,7 +234,7 @@ bugfixes or new features of anki-connect."
          (result (alist-get 'result response))
          (err (alist-get 'error response)))
     (if result
-        (org-set-property (substring (symbol-name anki-editor-note-id-prop) 1)
+        (org-set-property (substring (symbol-name anki-editor-prop-note-id) 1)
                           (format "%d" (alist-get 'result response)))
       (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
 
@@ -245,16 +260,16 @@ bugfixes or new features of anki-connect."
                         ("tags" . ,(mapconcat #'identity removed-tags " ")))))))
 
 (defun anki-editor--set-failure-reason (reason)
-  (org-set-property (substring (symbol-name anki-editor-note-failure-reason-prop) 1) reason))
+  (org-set-property (substring (symbol-name anki-editor-prop-failure-reason) 1) reason))
 
 (defun anki-editor--clear-failure-reason ()
-  (org-delete-property (substring (symbol-name anki-editor-note-failure-reason-prop) 1)))
+  (org-delete-property (substring (symbol-name anki-editor-prop-failure-reason) 1)))
 
 (defun anki-editor--heading-to-note (heading)
   (let (note-id note-type tags fields)
-    (setq note-id (org-element-property anki-editor-note-id-prop heading)
-          note-type (org-element-property anki-editor-note-type-prop heading)
-          tags (org-element-property anki-editor-note-tags-prop heading)
+    (setq note-id (org-element-property anki-editor-prop-note-id heading)
+          note-type (org-element-property anki-editor-prop-note-type heading)
+          tags (org-element-property anki-editor-prop-note-tags heading)
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
     (unless note-type (error "Missing note type"))
