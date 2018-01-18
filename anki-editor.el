@@ -6,6 +6,7 @@
 ;; Description: Create Anki Cards in Org-mode
 ;; Author: Louie Tan
 ;; Version: 0.1.0
+;; Package-Requires: ((emacs "25"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -42,15 +43,30 @@
 (require 'org-element)
 
 
-(defvar anki-editor-note-tag "note")
-(defvar anki-editor-deck-tag "deck")
-(defvar anki-editor-note-type-prop :ANKI_NOTE_TYPE)
-(defvar anki-editor-note-tags-prop :ANKI_TAGS)
-(defvar anki-editor-note-id-prop :ANKI_NOTE_ID)
-(defvar anki-editor-note-failure-reason-prop :ANKI_FAILURE_REASON)
-(defvar anki-editor-html-output-buffer-name "*anki-editor html output*")
-(defvar anki-editor-anki-connect-listening-address "127.0.0.1")
-(defvar anki-editor-anki-connect-listening-port "8765")
+(defconst anki-editor-prop-note-type :ANKI_NOTE_TYPE)
+(defconst anki-editor-prop-note-tags :ANKI_TAGS)
+(defconst anki-editor-prop-note-id :ANKI_NOTE_ID)
+(defconst anki-editor-prop-failure-reason :ANKI_FAILURE_REASON)
+(defconst anki-editor-buffer-html-output "*anki-editor HTML Output*")
+
+(defcustom anki-editor-note-tag
+  "note"
+  "Headings with this tag will be considered as notes."
+  :group 'anki-editor)
+(defcustom anki-editor-deck-tag
+  "deck"
+  "Headings with this tag will be considered as decks."
+  :group 'anki-editor)
+
+(defcustom anki-editor-anki-connect-listening-address
+  "127.0.0.1"
+  "The network address anki-connect is listening."
+  :group 'anki-editor)
+
+(defcustom anki-editor-anki-connect-listening-port
+  "8765"
+  "The port number anki-connect is listening."
+  :group 'anki-editor)
 
 
 ;;;###autoload
@@ -94,12 +110,9 @@ of that heading."
 With PREFIX, only insert the deck name."
   (interactive "P")
   (message "Fetching decks...")
-  (let* ((response (anki-editor--anki-connect-invoke "deckNames" 5))
-         (err (alist-get 'error response))
-         result deckname)
-    (when err (error "Error fetching deck names: %s" err))
-    (setq result (sort (alist-get 'result response) #'string-lessp)
-          deckname (completing-read "Choose a deck: " result))
+  (let ((decks (sort (anki-editor--anki-connect-invoke-result "deckNames" 5) #'string-lessp))
+        deckname)
+    (setq deckname (completing-read "Choose a deck: " decks))
     (unless prefix (org-insert-heading-respect-content))
     (insert deckname)
     (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag))))
@@ -112,23 +125,17 @@ that's one level lower to the current one as well as subheadings
 that correspond to fields."
   (interactive)
   (message "Fetching note types...")
-  (let* ((response (anki-editor--anki-connect-invoke "modelNames" 5))
-         (err (alist-get 'error response))
-         (note-types (alist-get 'result response))
-         note-type note-heading fields)
-
-    (when err (error "Error fetching note types: %s" err))
-    (setq note-types (sort note-types #'string-lessp)
-          note-type (completing-read "Choose a note type: " note-types))
+  (let ((note-types (sort (anki-editor--anki-connect-invoke-result "modelNames" 5) #'string-lessp))
+        note-type note-heading fields)
+    (setq note-type (completing-read "Choose a note type: " note-types))
     (message "Fetching note fields...")
-    (setq response (anki-editor--anki-connect-invoke "modelFieldNames" 5 `((modelName . ,note-type)))
-          fields (alist-get 'result response)
+    (setq fields (anki-editor--anki-connect-invoke-result "modelFieldNames" 5 `((modelName . ,note-type)))
           note-heading (read-from-minibuffer "Enter the heading: " "Item"))
     (org-insert-heading-respect-content)
     (org-do-demote)
     (insert note-heading)
     (anki-editor--set-tags-fix anki-editor-note-tag)
-    (org-set-property (substring (symbol-name anki-editor-note-type-prop) 1) note-type)
+    (org-set-property (substring (symbol-name anki-editor-prop-note-type) 1) note-type)
     (seq-each (lambda (field)
                 (save-excursion
                   (org-insert-heading-respect-content)
@@ -138,6 +145,13 @@ that correspond to fields."
     (org-next-visible-heading 1)
     (end-of-line)
     (newline-and-indent)))
+
+;;;###autoload
+(defun anki-editor-insert-tags ()
+  "Insert a tag at point with autocompletion."
+  (interactive)
+  (let ((tags (sort (anki-editor--anki-connect-invoke-result "getTags" 5) #'string-lessp)))
+    (while t (insert (format " %s" (completing-read "Choose a tag: " tags))))))
 
 ;;;###autoload
 (defun anki-editor-export-heading-contents-to-html ()
@@ -151,9 +165,9 @@ that correspond to fields."
 
       (setq contents (buffer-substring-no-properties (org-element-property :contents-begin tree)
                                                      (org-element-property :contents-end tree)))
-      (when (buffer-live-p (get-buffer anki-editor-html-output-buffer-name))
-        (kill-buffer anki-editor-html-output-buffer-name))
-      (switch-to-buffer-other-window (get-buffer-create anki-editor-html-output-buffer-name))
+      (when (buffer-live-p (get-buffer anki-editor-buffer-html-output))
+        (kill-buffer anki-editor-buffer-html-output))
+      (switch-to-buffer-other-window (get-buffer-create anki-editor-buffer-html-output))
       (insert (anki-editor--generate-html contents)))))
 
 ;;;###autoload
@@ -167,6 +181,7 @@ that correspond to fields."
 (setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
                              (,(kbd "C-c a i d") . ,#'anki-editor-insert-deck)
                              (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)
+                             (,(kbd "C-c a i t") . ,#'anki-editor-insert-tags)
                              (,(kbd "C-c a e") . ,#'anki-editor-export-heading-contents-to-html)))
 
 ;;;###autoload
@@ -188,12 +203,65 @@ code in the master branch of its Github repo.
 This is useful when new version of this package depends on the
 bugfixes or new features of anki-connect."
   (interactive)
-  (let* ((response (anki-editor--anki-connect-invoke "upgrade" 5))
-         (result (alist-get 'result response))
-         (err (alist-get 'error response)))
-    (when err (error err))
+  (let ((result (anki-editor--anki-connect-invoke-result "upgrade" 5)))
     (when (and (booleanp result) result)
       (message "anki-connect has upgraded, you may have to restart Anki to make it in effect."))))
+
+;;; anki-connect
+
+(defun anki-editor--anki-connect-invoke (action version &optional params)
+  (let* ((data `(("action" . ,action)
+                 ("version" . ,version)))
+         (request-body (json-encode
+                        (if params
+                            (add-to-list 'data `("params" . ,params))
+                          data)))
+         (request-tempfile (make-temp-file "emacs-anki-editor")))
+
+    (with-temp-file request-tempfile
+      (setq buffer-file-coding-system 'utf-8)
+      (set-buffer-multibyte t)
+      (insert request-body))
+
+    (let* ((raw-resp (shell-command-to-string
+                      (format "curl %s:%s --silent -X POST --data-binary @%s"
+                              anki-editor-anki-connect-listening-address
+                              anki-editor-anki-connect-listening-port
+                              request-tempfile)))
+           resp error)
+
+      (when (file-exists-p request-tempfile) (delete-file request-tempfile))
+      (condition-case err
+          (let ((json-array-type 'list))
+            (setq resp (json-read-from-string raw-resp)
+                  error (alist-get 'error resp)))
+        (error (setq error
+                     (format "Unexpected error communicating with anki-connect: %s, the response was %s"
+                             (error-message-string err)
+                             (prin1-to-string raw-resp)))))
+      `((result . ,(alist-get 'result resp))
+        (error . ,error)))))
+
+(defmacro anki-editor--anki-connect-invoke-result (&rest args)
+  `(let* ((resp (anki-editor--anki-connect-invoke ,@args))
+          (rslt (alist-get 'result resp))
+          (err (alist-get 'error resp)))
+     (when err (error err))
+     rslt))
+
+(defun anki-editor--anki-connect-map-note (note)
+  `(("id" . ,(alist-get 'note-id note))
+    ("deckName" . ,(alist-get 'deck note))
+    ("modelName" . ,(alist-get 'note-type note))
+    ("fields" . ,(alist-get 'fields note))
+    ;; Convert tags to a vector since empty list is identical to nil
+    ;; which will become None in Python, but anki-connect requires it
+    ;; to be type of list.
+    ("tags" . ,(vconcat (alist-get 'tags note)))))
+
+(defun anki-editor--anki-connect-heading-to-note (heading)
+  (anki-editor--anki-connect-map-note
+   (anki-editor--heading-to-note heading)))
 
 ;;; Core Functions
 
@@ -223,42 +291,42 @@ bugfixes or new features of anki-connect."
          (result (alist-get 'result response))
          (err (alist-get 'error response)))
     (if result
-        (org-set-property (substring (symbol-name anki-editor-note-id-prop) 1)
+        (org-set-property (substring (symbol-name anki-editor-prop-note-id) 1)
                           (format "%d" (alist-get 'result response)))
       (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
 
 (defun anki-editor--update-note (note)
   "Update fields and tags of NOTE."
-  (let* ((response (anki-editor--anki-connect-invoke
-                    "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note)))))
-         (err (alist-get 'error response)))
-    (when err (error err))
-    ;; update tags
-    (let (existing-note added-tags removed-tags)
-      (setq response (anki-editor--anki-connect-invoke "notesInfo" 5 `(("notes" . (,(alist-get 'note-id note)))))
-            err (alist-get 'error response))
-      (when err (error err))
-      (setq existing-note (car (alist-get 'result response))
-            added-tags (cl-set-difference (alist-get 'tags note) (alist-get 'tags existing-note) :test #'string-equal)
-            removed-tags (cl-set-difference (alist-get 'tags existing-note) (alist-get 'tags note) :test #'string-equal))
-      (when added-tags
-        (anki-editor--anki-connect-invoke "addTags" 5 `(("notes" . (,(alist-get 'note-id note)))
-                                                        ("tags" . ,(mapconcat #'identity added-tags " ")))))
-      (when removed-tags
-        (anki-editor--anki-connect-invoke "removeTags" 5 `(("notes" . (,(alist-get 'note-id note)))
-                                                           ("tags" . ,(mapconcat #'identity removed-tags " "))))))))
+  (anki-editor--anki-connect-invoke-result
+   "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note))))
+
+  ;; update tags
+  (let (existing-note added-tags removed-tags)
+    (setq existing-note (car (anki-editor--anki-connect-invoke-result
+                              "notesInfo" 5 `(("notes" . (,(alist-get 'note-id note))))))
+          added-tags (cl-set-difference (alist-get 'tags note) (alist-get 'tags existing-note) :test #'string-equal)
+          removed-tags (cl-set-difference (alist-get 'tags existing-note) (alist-get 'tags note) :test #'string-equal))
+
+    (when added-tags
+      (anki-editor--anki-connect-invoke-result
+       "addTags" 5 `(("notes" . (,(alist-get 'note-id note)))
+                     ("tags" . ,(mapconcat #'identity added-tags " ")))))
+    (when removed-tags
+      (anki-editor--anki-connect-invoke-result
+       "removeTags" 5 `(("notes" . (,(alist-get 'note-id note)))
+                        ("tags" . ,(mapconcat #'identity removed-tags " ")))))))
 
 (defun anki-editor--set-failure-reason (reason)
-  (org-set-property (substring (symbol-name anki-editor-note-failure-reason-prop) 1) reason))
+  (org-set-property (substring (symbol-name anki-editor-prop-failure-reason) 1) reason))
 
 (defun anki-editor--clear-failure-reason ()
-  (org-delete-property (substring (symbol-name anki-editor-note-failure-reason-prop) 1)))
+  (org-delete-property (substring (symbol-name anki-editor-prop-failure-reason) 1)))
 
 (defun anki-editor--heading-to-note (heading)
   (let (note-id note-type tags fields)
-    (setq note-id (org-element-property anki-editor-note-id-prop heading)
-          note-type (org-element-property anki-editor-note-type-prop heading)
-          tags (org-element-property anki-editor-note-tags-prop heading)
+    (setq note-id (org-element-property anki-editor-prop-note-id heading)
+          note-type (org-element-property anki-editor-prop-note-type heading)
+          tags (org-element-property anki-editor-prop-note-tags heading)
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
     (unless note-type (error "Missing note type"))
@@ -364,55 +432,6 @@ bugfixes or new features of anki-connect."
     (goto-char begin)
     (insert replacement)
     (cons original replacement)))
-
-;;; anki-connect
-
-(defun anki-editor--anki-connect-invoke (action version &optional params)
-  (let* ((data `(("action" . ,action)
-                 ("version" . ,version)))
-         (request-body (json-encode
-                        (if params
-                            (add-to-list 'data `("params" . ,params))
-                          data)))
-         (request-tempfile (make-temp-file "emacs-anki-editor")))
-
-    (with-temp-file request-tempfile
-      (setq buffer-file-coding-system 'utf-8)
-      (set-buffer-multibyte t)
-      (insert request-body))
-
-    (let* ((raw-resp (shell-command-to-string
-                      (format "curl %s:%s --silent -X POST --data-binary @%s"
-                              anki-editor-anki-connect-listening-address
-                              anki-editor-anki-connect-listening-port
-                              request-tempfile)))
-           resp error)
-
-      (when (file-exists-p request-tempfile) (delete-file request-tempfile))
-      (condition-case err
-          (let ((json-array-type 'list))
-            (setq resp (json-read-from-string raw-resp)
-                  error (alist-get 'error resp)))
-        (error (setq error
-                     (format "Unexpected error communicating with anki-connect: %s, the response was %s"
-                             (error-message-string err)
-                             (prin1-to-string raw-resp)))))
-      `((result . ,(alist-get 'result resp))
-        (error . ,error)))))
-
-(defun anki-editor--anki-connect-map-note (note)
-  `(("id" . ,(alist-get 'note-id note))
-    ("deckName" . ,(alist-get 'deck note))
-    ("modelName" . ,(alist-get 'note-type note))
-    ("fields" . ,(alist-get 'fields note))
-    ;; Convert tags to a vector since empty list is identical to nil
-    ;; which will become None in Python, but anki-connect requires it
-    ;; to be type of list.
-    ("tags" . ,(vconcat (alist-get 'tags note)))))
-
-(defun anki-editor--anki-connect-heading-to-note (heading)
-  (anki-editor--anki-connect-map-note
-   (anki-editor--heading-to-note heading)))
 
 (provide 'anki-editor)
 
