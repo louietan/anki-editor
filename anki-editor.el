@@ -6,6 +6,7 @@
 ;; Description: Create Anki Cards in Org-mode
 ;; Author: Louie Tan
 ;; Version: 0.1.0
+;; Package-Requires: ((emacs "25"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -206,6 +207,62 @@ bugfixes or new features of anki-connect."
     (when (and (booleanp result) result)
       (message "anki-connect has upgraded, you may have to restart Anki to make it in effect."))))
 
+;;; anki-connect
+
+(defun anki-editor--anki-connect-invoke (action version &optional params)
+  (let* ((data `(("action" . ,action)
+                 ("version" . ,version)))
+         (request-body (json-encode
+                        (if params
+                            (add-to-list 'data `("params" . ,params))
+                          data)))
+         (request-tempfile (make-temp-file "emacs-anki-editor")))
+
+    (with-temp-file request-tempfile
+      (setq buffer-file-coding-system 'utf-8)
+      (set-buffer-multibyte t)
+      (insert request-body))
+
+    (let* ((raw-resp (shell-command-to-string
+                      (format "curl %s:%s --silent -X POST --data-binary @%s"
+                              anki-editor-anki-connect-listening-address
+                              anki-editor-anki-connect-listening-port
+                              request-tempfile)))
+           resp error)
+
+      (when (file-exists-p request-tempfile) (delete-file request-tempfile))
+      (condition-case err
+          (let ((json-array-type 'list))
+            (setq resp (json-read-from-string raw-resp)
+                  error (alist-get 'error resp)))
+        (error (setq error
+                     (format "Unexpected error communicating with anki-connect: %s, the response was %s"
+                             (error-message-string err)
+                             (prin1-to-string raw-resp)))))
+      `((result . ,(alist-get 'result resp))
+        (error . ,error)))))
+
+(defmacro anki-editor--anki-connect-invoke-result (&rest args)
+  `(let* ((resp (anki-editor--anki-connect-invoke ,@args))
+          (rslt (alist-get 'result resp))
+          (err (alist-get 'error resp)))
+     (when err (error err))
+     rslt))
+
+(defun anki-editor--anki-connect-map-note (note)
+  `(("id" . ,(alist-get 'note-id note))
+    ("deckName" . ,(alist-get 'deck note))
+    ("modelName" . ,(alist-get 'note-type note))
+    ("fields" . ,(alist-get 'fields note))
+    ;; Convert tags to a vector since empty list is identical to nil
+    ;; which will become None in Python, but anki-connect requires it
+    ;; to be type of list.
+    ("tags" . ,(vconcat (alist-get 'tags note)))))
+
+(defun anki-editor--anki-connect-heading-to-note (heading)
+  (anki-editor--anki-connect-map-note
+   (anki-editor--heading-to-note heading)))
+
 ;;; Core Functions
 
 (defun anki-editor--process-note-heading (deck)
@@ -375,62 +432,6 @@ bugfixes or new features of anki-connect."
     (goto-char begin)
     (insert replacement)
     (cons original replacement)))
-
-;;; anki-connect
-
-(defun anki-editor--anki-connect-invoke (action version &optional params)
-  (let* ((data `(("action" . ,action)
-                 ("version" . ,version)))
-         (request-body (json-encode
-                        (if params
-                            (add-to-list 'data `("params" . ,params))
-                          data)))
-         (request-tempfile (make-temp-file "emacs-anki-editor")))
-
-    (with-temp-file request-tempfile
-      (setq buffer-file-coding-system 'utf-8)
-      (set-buffer-multibyte t)
-      (insert request-body))
-
-    (let* ((raw-resp (shell-command-to-string
-                      (format "curl %s:%s --silent -X POST --data-binary @%s"
-                              anki-editor-anki-connect-listening-address
-                              anki-editor-anki-connect-listening-port
-                              request-tempfile)))
-           resp error)
-
-      (when (file-exists-p request-tempfile) (delete-file request-tempfile))
-      (condition-case err
-          (let ((json-array-type 'list))
-            (setq resp (json-read-from-string raw-resp)
-                  error (alist-get 'error resp)))
-        (error (setq error
-                     (format "Unexpected error communicating with anki-connect: %s, the response was %s"
-                             (error-message-string err)
-                             (prin1-to-string raw-resp)))))
-      `((result . ,(alist-get 'result resp))
-        (error . ,error)))))
-
-(defmacro anki-editor--anki-connect-invoke-result (&rest args)
-  `(let* ((resp (anki-editor--anki-connect-invoke ,@args))
-          (rslt (alist-get 'result resp))
-          (err (alist-get 'error resp)))
-     (when err (error err))
-     rslt))
-
-(defun anki-editor--anki-connect-map-note (note)
-  `(("id" . ,(alist-get 'note-id note))
-    ("deckName" . ,(alist-get 'deck note))
-    ("modelName" . ,(alist-get 'note-type note))
-    ("fields" . ,(alist-get 'fields note))
-    ;; Convert tags to a vector since empty list is identical to nil
-    ;; which will become None in Python, but anki-connect requires it
-    ;; to be type of list.
-    ("tags" . ,(vconcat (alist-get 'tags note)))))
-
-(defun anki-editor--anki-connect-heading-to-note (heading)
-  (anki-editor--anki-connect-map-note
-   (anki-editor--heading-to-note heading)))
 
 (provide 'anki-editor)
 
