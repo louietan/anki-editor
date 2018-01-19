@@ -210,6 +210,7 @@ bugfixes or new features of anki-connect."
 ;;; anki-connect
 
 (defun anki-editor--anki-connect-invoke (action version &optional params)
+  "Invoke anki-connect with ACTION, VERSION and PARAMS."
   (let* ((data `(("action" . ,action)
                  ("version" . ,version)))
          (request-body (json-encode
@@ -243,6 +244,7 @@ bugfixes or new features of anki-connect."
         (error . ,error)))))
 
 (defmacro anki-editor--anki-connect-invoke-result (&rest args)
+  "Invoke anki-connect with ARGS, return the result from response or raise an error."
   `(let* ((resp (anki-editor--anki-connect-invoke ,@args))
           (rslt (alist-get 'result resp))
           (err (alist-get 'error resp)))
@@ -250,6 +252,7 @@ bugfixes or new features of anki-connect."
      rslt))
 
 (defun anki-editor--anki-connect-map-note (note)
+  "Convert NOTE to the form that anki-connect accepts."
   `(("id" . ,(alist-get 'note-id note))
     ("deckName" . ,(alist-get 'deck note))
     ("modelName" . ,(alist-get 'note-type note))
@@ -260,12 +263,15 @@ bugfixes or new features of anki-connect."
     ("tags" . ,(vconcat (alist-get 'tags note)))))
 
 (defun anki-editor--anki-connect-heading-to-note (heading)
+  "Convert HEADING to a note in the form that anki-connect accepts."
   (anki-editor--anki-connect-map-note
    (anki-editor--heading-to-note heading)))
 
 ;;; Core Functions
 
 (defun anki-editor--process-note-heading (deck)
+  "Process note heading at point.
+DECK is used when the action is note creation."
   (unless deck (error "No deck specified"))
 
   (let (note-elem note)
@@ -281,11 +287,13 @@ bugfixes or new features of anki-connect."
     (anki-editor--save-note note)))
 
 (defun anki-editor--save-note (note)
+  "Request anki-connect for updating or creating NOTE."
   (if (= (alist-get 'note-id note) -1)
       (anki-editor--create-note note)
     (anki-editor--update-note note)))
 
 (defun anki-editor--create-note (note)
+  "Request anki-connect for creating NOTE."
   (let* ((response (anki-editor--anki-connect-invoke
                     "addNote" 5 `((note . ,(anki-editor--anki-connect-map-note note)))))
          (result (alist-get 'result response))
@@ -296,7 +304,7 @@ bugfixes or new features of anki-connect."
       (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
 
 (defun anki-editor--update-note (note)
-  "Update fields and tags of NOTE."
+  "Request anki-connect for updating fields and tags of NOTE."
   (anki-editor--anki-connect-invoke-result
    "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note))))
 
@@ -317,12 +325,15 @@ bugfixes or new features of anki-connect."
                         ("tags" . ,(mapconcat #'identity removed-tags " ")))))))
 
 (defun anki-editor--set-failure-reason (reason)
+  "Set failure reason to REASON in property drawer at point."
   (org-set-property (substring (symbol-name anki-editor-prop-failure-reason) 1) reason))
 
 (defun anki-editor--clear-failure-reason ()
+  "Clear failure reason in property drawer at point."
   (org-delete-property (substring (symbol-name anki-editor-prop-failure-reason) 1)))
 
 (defun anki-editor--heading-to-note (heading)
+  "Construct an alist representing a note for HEADING."
   (let (note-id note-type tags fields)
     (setq note-id (org-element-property anki-editor-prop-note-id heading)
           note-type (org-element-property anki-editor-prop-note-type heading)
@@ -338,10 +349,12 @@ bugfixes or new features of anki-connect."
       (fields . ,fields))))
 
 (defun anki-editor--get-subheadings (heading)
+  "Get all the subheadings of HEADING."
   (org-element-map (org-element-contents heading)
       'headline 'identity nil nil 'headline))
 
 (defun anki-editor--heading-to-note-field (heading)
+  "Convert HEADING to field data, a cons cell, the car of which is the field name, the cdr of which is contens represented in HTML."
   (let ((field-name (substring-no-properties
                      (org-element-property
                       :raw-value
@@ -350,9 +363,10 @@ bugfixes or new features of anki-connect."
     `(,field-name . ,(anki-editor--generate-html
                       (org-element-interpret-data contents)))))
 
-(defun anki-editor--generate-html (org-content)
+(defun anki-editor--generate-html (contents)
+  "Convert CONTENTS to HTML."
   (with-temp-buffer
-    (insert org-content)
+    (insert contents)
     (setq anki-editor--replacement-records nil)
     (anki-editor--replace-latex)
     (anki-editor--buffer-to-html)
@@ -362,12 +376,14 @@ bugfixes or new features of anki-connect."
 ;; Transformers
 
 (defun anki-editor--buffer-to-html ()
+  "Transform contents of buffer to HTML."
   (when (> (buffer-size) 0)
     (insert
      (org-export-string-as
       (delete-and-extract-region (point-min) (point-max)) 'html t))))
 
 (defun anki-editor--replace-latex ()
+  "Replace latex objects with the hash of it's content."
   (let (object type memo)
     (while (setq object (org-element-map
                             (org-element-parse-buffer)
@@ -393,9 +409,11 @@ bugfixes or new features of anki-connect."
         (,(format "%s$" (regexp-quote "\\]")) . "[/$$]")))
 
 (defun anki-editor--wrap-latex (content)
+  "Wrap CONTENT with Anki-style latex markers."
   (format "[latex]%s[/latex]" content))
 
 (defun anki-editor--convert-latex-fragment (frag)
+  "Convert latex fragment FRAG to Anki-style."
   (let ((copy frag))
     (dolist (map anki-editor--anki-latex-syntax-map)
       (setq frag (replace-regexp-in-string (car map) (cdr map) frag t t)))
@@ -404,6 +422,7 @@ bugfixes or new features of anki-connect."
       frag)))
 
 (defun anki-editor--translate-latex ()
+  "Transform latex objects that were previously replaced with hashes to Anki-style."
   (let (ele-data translated)
     (dolist (record anki-editor--replacement-records)
       (setq ele-data (cdr record))
@@ -418,13 +437,16 @@ bugfixes or new features of anki-connect."
 ;;; Utilities
 
 (defun anki-editor--hash (type text)
+  "Compute hash of object, whose type and contens is TYPE and TEXT respectively."
   (sha1 (format "%s %s" (symbol-name type) text)))
 
 (defun anki-editor--set-tags-fix (tags)
+  "Set tags to TAGS and fix tags on the fly."
   (org-set-tags-to tags)
   (org-fix-tags-on-the-fly))
 
 (defun anki-editor--replace-node (node replacer)
+  "Replace contents of NODE with the result from applying REPLACER to the contents of NODE."
   (let* ((begin (org-element-property :begin node))
          (end (- (org-element-property :end node) (org-element-property :post-blank node)))
          (original (delete-and-extract-region begin end))
