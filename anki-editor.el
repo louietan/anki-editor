@@ -142,24 +142,24 @@ If one fails, the failure reason will be set in property drawer
 of that heading."
   (interactive)
   (let ((total 0)
-        (failed 0))
-    (save-excursion
-      (goto-char (point-min))
-      (let (current-tags current-deck)
-        (while (not (= (point) (point-max)))
-          (when (org-at-heading-p)
-            (setq current-tags (org-get-tags))
-            (cond
-             ((member anki-editor-deck-tag current-tags) (setq current-deck (nth 4 (org-heading-components))))
-             ((member anki-editor-note-tag current-tags) (progn
-                                                           (setq total (1+ total))
-                                                           (anki-editor--clear-failure-reason)
-                                                           (condition-case err
-                                                               (anki-editor--process-note-heading current-deck)
-                                                             (error (progn
-                                                                      (setq failed (1+ failed))
-                                                                      (anki-editor--set-failure-reason (error-message-string err)))))))))
-          (org-next-visible-heading 1))))
+        (failed 0)
+        current-deck)
+    (org-map-entries
+     (lambda ()
+       (let ((current-tags (org-get-tags)))
+         (cond
+          ((member anki-editor-deck-tag current-tags)
+           (setq current-deck (nth 4 (org-heading-components))))
+          ((member anki-editor-note-tag current-tags)
+           (progn
+             (setq total (1+ total))
+             (anki-editor--clear-failure-reason)
+             (condition-case err
+                 (anki-editor--process-note-heading current-deck)
+               (error (progn
+                        (setq failed (1+ failed))
+                        (anki-editor--set-failure-reason (error-message-string err))))))))))
+     (mapconcat 'identity `(,anki-editor-deck-tag ,anki-editor-note-tag) "|"))
     (message (with-output-to-string
                (princ (format "Submitted %d notes, with %d failed." total failed))
                (when (> failed 0)
