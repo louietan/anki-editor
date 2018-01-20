@@ -367,6 +367,7 @@ DECK is used when the action is note creation."
 (defun anki-editor--generate-html (contents)
   "Convert CONTENTS to HTML."
   (with-temp-buffer
+    (org-mode)
     (insert contents)
     (setq anki-editor--replacement-records nil)
     (anki-editor--replace-latex)
