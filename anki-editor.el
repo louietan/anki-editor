@@ -89,6 +89,7 @@
     (define-key map anki-editor-keymap-prefix anki-editor--key-map)
     map))
 
+;;;###autoload
 (define-minor-mode anki-editor-mode "Minor mode that helps you create Anki cards in an Org buffer."
   :init-value nil
   :keymap anki-editor-mode-map)
