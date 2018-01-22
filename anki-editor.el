@@ -61,10 +61,6 @@
   "deck"
   "Headings with this tag will be considered as decks.")
 
-(defcustom anki-editor-keymap-prefix
-  (kbd "C-c a")
-  "Anki-editor keymap prefix.")
-
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
   "The network address anki-connect is listening.")
@@ -73,26 +69,6 @@
   "8765"
   "The port number anki-connect is listening.")
 
-;;; Minor Mode
-
-(defvar anki-editor--key-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "s") #'anki-editor-submit)
-    (define-key map (kbd "i d") #'anki-editor-insert-deck)
-    (define-key map (kbd "i n") #'anki-editor-insert-note)
-    (define-key map (kbd "i t") #'anki-editor-insert-tags)
-    (define-key map (kbd "e") #'anki-editor-export-heading-contents-to-html)
-    map))
-
-(defvar anki-editor-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map anki-editor-keymap-prefix anki-editor--key-map)
-    map))
-
-;;;###autoload
-(define-minor-mode anki-editor-mode "Minor mode that helps you create Anki cards in an Org buffer."
-  :init-value nil
-  :keymap anki-editor-mode-map)
 
 ;;; anki-connect
 
