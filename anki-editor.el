@@ -49,24 +49,25 @@
 (defconst anki-editor-prop-failure-reason :ANKI_FAILURE_REASON)
 (defconst anki-editor-buffer-html-output "*anki-editor HTML Output*")
 
+(defgroup anki-editor nil
+  "Customizations for anki-editor."
+  :group 'org)
+
 (defcustom anki-editor-note-tag
   "note"
-  "Headings with this tag will be considered as notes."
-  :group 'anki-editor)
+  "Headings with this tag will be considered as notes.")
+
 (defcustom anki-editor-deck-tag
   "deck"
-  "Headings with this tag will be considered as decks."
-  :group 'anki-editor)
+  "Headings with this tag will be considered as decks.")
 
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
-  "The network address anki-connect is listening."
-  :group 'anki-editor)
+  "The network address anki-connect is listening.")
 
 (defcustom anki-editor-anki-connect-listening-port
   "8765"
-  "The port number anki-connect is listening."
-  :group 'anki-editor)
+  "The port number anki-connect is listening.")
 
 
 ;;; anki-connect
@@ -77,7 +78,7 @@
                  ("version" . ,version)))
          (request-body (json-encode
                         (if params
-                            (add-to-list 'data `("params" . ,params))
+                            (push `("params" . ,params) data)
                           data)))
          (request-tempfile (make-temp-file "emacs-anki-editor")))
 
@@ -88,9 +89,9 @@
 
     (let* ((raw-resp (shell-command-to-string
                       (format "curl %s:%s --silent -X POST --data-binary @%s"
-                              anki-editor-anki-connect-listening-address
-                              anki-editor-anki-connect-listening-port
-                              request-tempfile)))
+                              (shell-quote-argument anki-editor-anki-connect-listening-address)
+                              (shell-quote-argument anki-editor-anki-connect-listening-port)
+                              (shell-quote-argument request-tempfile))))
            resp error)
 
       (when (file-exists-p request-tempfile) (delete-file request-tempfile))
@@ -115,20 +116,22 @@
 
 (defun anki-editor--anki-connect-map-note (note)
   "Convert NOTE to the form that anki-connect accepts."
-  `(("id" . ,(alist-get 'note-id note))
-    ("deckName" . ,(alist-get 'deck note))
-    ("modelName" . ,(alist-get 'note-type note))
-    ("fields" . ,(alist-get 'fields note))
-    ;; Convert tags to a vector since empty list is identical to nil
-    ;; which will become None in Python, but anki-connect requires it
-    ;; to be type of list.
-    ("tags" . ,(vconcat (alist-get 'tags note)))))
+  (let-alist note
+    (list (cons "id" .note-id)
+          (cons "deckName" .deck)
+          (cons "modelName" .note-type)
+          (cons "fields" .fields)
+          ;; Convert tags to a vector since empty list is identical to nil
+          ;; which will become None in Python, but anki-connect requires it
+          ;; to be type of list.
+          (cons "tags" (vconcat .tags)))))
 
 (defun anki-editor--anki-connect-heading-to-note (heading)
   "Convert HEADING to a note in the form that anki-connect accepts."
   (anki-editor--anki-connect-map-note
    (anki-editor--heading-to-note heading)))
 
+;;; Commands
 
 ;;;###autoload
 (defun anki-editor-submit ()
@@ -197,12 +200,11 @@ that correspond to fields."
     (insert note-heading)
     (anki-editor--set-tags-fix anki-editor-note-tag)
     (org-set-property (substring (symbol-name anki-editor-prop-note-type) 1) note-type)
-    (seq-each (lambda (field)
-                (save-excursion
-                  (org-insert-heading-respect-content)
-                  (org-do-demote)
-                  (insert field)))
-              fields)
+    (dolist (field fields)
+      (save-excursion
+        (org-insert-heading-respect-content)
+        (org-do-demote)
+        (insert field)))
     (org-next-visible-heading 1)
     (end-of-line)
     (newline-and-indent)))
@@ -239,34 +241,21 @@ that correspond to fields."
   (insert (anki-editor--generate-html
            (delete-and-extract-region (region-beginning) (region-end)))))
 
-(setq anki-editor--key-map `((,(kbd "C-c a s") . ,#'anki-editor-submit)
-                             (,(kbd "C-c a i d") . ,#'anki-editor-insert-deck)
-                             (,(kbd "C-c a i n") . ,#'anki-editor-insert-note)
-                             (,(kbd "C-c a i t") . ,#'anki-editor-insert-tags)
-                             (,(kbd "C-c a e") . ,#'anki-editor-export-heading-contents-to-html)))
-
-;;;###autoload
-(defun anki-editor-setup-default-keybindings ()
-  "Set up the default keybindings."
-  (interactive)
-  (dolist (map anki-editor--key-map)
-    (local-set-key (car map) (cdr map)))
-  (message "anki-editor default keybindings have been set"))
-
 ;;;###autoload
 (defun anki-editor-anki-connect-upgrade ()
   "Upgrade anki-connect to the latest version.
 
 This will display a confirmation dialog box in Anki asking if you
-want to continue.  The upgrading is done by downloading the latest
+want to continue. The upgrading is done by downloading the latest
 code in the master branch of its Github repo.
 
 This is useful when new version of this package depends on the
 bugfixes or new features of anki-connect."
   (interactive)
-  (let ((result (anki-editor--anki-connect-invoke-result "upgrade" 5)))
-    (when (and (booleanp result) result)
-      (message "anki-connect has upgraded, you may have to restart Anki to make it in effect."))))
+  (when (yes-or-no-p "NOTE: This will download the latest codebase of anki-connect to your system, which is not guaranteed to be safe or stable. Generally, you don't need this command, this is useful only when new version of this package requires the updates of anki-connect that are not released yet. Do you still want to continue?")
+    (let ((result (anki-editor--anki-connect-invoke-result "upgrade" 5)))
+      (when (and (booleanp result) result)
+        (message "anki-connect has been upgraded, you might have to restart Anki to make it in effect.")))))
 
 ;;; Core Functions
 
@@ -284,7 +273,7 @@ DECK is used when the action is note creation."
                         (insert content)
                         (car (org-element-contents (org-element-parse-buffer)))))
           note (anki-editor--heading-to-note note-elem))
-    (add-to-list 'note `(deck . ,deck))
+    (push `(deck . ,deck) note)
     (anki-editor--save-note note)))
 
 (defun anki-editor--save-note (note)
@@ -396,19 +385,19 @@ DECK is used when the action is note creation."
                                             (lambda (original)
                                               (anki-editor--hash type
                                                                  original))))
-      (add-to-list 'anki-editor--replacement-records
-                   `(,(cdr memo) . ((type . ,type)
-                                    (original . ,(car memo))))))))
+      (push `(,(cdr memo) . ((type . ,type)
+                             (original . ,(car memo))))
+            anki-editor--replacement-records))))
 
-(setq anki-editor--anki-latex-syntax-map
-      `((,(format "^%s" (regexp-quote "$$")) . "[$$]")
-        (,(format "%s$" (regexp-quote "$$")) . "[/$$]")
-        (,(format "^%s" (regexp-quote "$")) . "[$]")
-        (,(format "%s$" (regexp-quote "$")) . "[/$]")
-        (,(format "^%s" (regexp-quote "\\(")) . "[$]")
-        (,(format "%s$" (regexp-quote "\\)")) . "[/$]")
-        (,(format "^%s" (regexp-quote "\\[")) . "[$$]")
-        (,(format "%s$" (regexp-quote "\\]")) . "[/$$]")))
+(defvar anki-editor--anki-latex-syntax-map
+  `((,(format "^%s" (regexp-quote "$$")) . "[$$]")
+    (,(format "%s$" (regexp-quote "$$")) . "[/$$]")
+    (,(format "^%s" (regexp-quote "$")) . "[$]")
+    (,(format "%s$" (regexp-quote "$")) . "[/$]")
+    (,(format "^%s" (regexp-quote "\\(")) . "[$]")
+    (,(format "%s$" (regexp-quote "\\)")) . "[/$]")
+    (,(format "^%s" (regexp-quote "\\[")) . "[$$]")
+    (,(format "%s$" (regexp-quote "\\]")) . "[/$$]")))
 
 (defun anki-editor--wrap-latex (content)
   "Wrap CONTENT with Anki-style latex markers."
@@ -433,7 +422,7 @@ DECK is used when the action is note creation."
         (pcase (alist-get 'type ele-data)
           ('latex-fragment (replace-match (anki-editor--convert-latex-fragment (alist-get 'original ele-data)) t t))
           ('latex-environment (replace-match (anki-editor--wrap-latex (alist-get 'original ele-data)) t t)))
-        (add-to-list 'translated record)))
+        (push record translated)))
     (setq anki-editor--replacement-records (cl-set-difference anki-editor--replacement-records translated))))
 
 ;;; Utilities
