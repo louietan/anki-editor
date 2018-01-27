@@ -399,9 +399,20 @@ DECK is used when the action is note creation."
     (,(format "^%s" (regexp-quote "\\[")) . "[$$]")
     (,(format "%s$" (regexp-quote "\\]")) . "[/$$]")))
 
+(defun anki-editor--clean-latex (content)
+  "Add whitespace between curly braces in CONTENT for compatiblity with cloze regions."
+  (let ((result "")
+        (match (string-match "}}" content)))
+    (while match
+      (setq result (replace-match "} } " nil nil content))
+      (message result)
+      ;; step 1 back in case we have more than two }
+      (setq match (string-match "}}" result (- match 1))))
+    result))
+
 (defun anki-editor--wrap-latex (content)
   "Wrap CONTENT with Anki-style latex markers."
-  (format "[latex]%s[/latex]" content))
+  (format "[latex]%s[/latex]" (anki-editor--clean-latex content)))
 
 (defun anki-editor--convert-latex-fragment (frag)
   "Convert latex fragment FRAG to Anki-style."
