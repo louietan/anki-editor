@@ -1,20 +1,18 @@
 anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
 
-* Requirements
+* Installation
 
+  *Requirements*
   - [[https://github.com/FooSoft/anki-connect#installation][anki-connect]],
     an Anki add-on required by this package to interact with Anki.
   - curl
 
+  If you have [[http://melpa.org/][MELPA]] in your =package-archives=,
+    just =M-x package-install RET anki-editor RET=, or install it
+    manually by downloading and visiting [[anki-editor.el]] in your
+    emacs buffer, and =M-x package-install-from-buffer RET=.
+
 * Usage
-
-** Installation
-
-   - Clone this repo and add the directory to your Emacs' =load-path=,
-     then =(require 'anki-editor)=.
-   - Or if you use =package.el=, just download
-     [[./anki-editor.el][anki-editor.el]] and visit it in Emacs, then
-     =M-x package-install-file=.
 
 ** The Syntax
 
