@@ -507,10 +507,27 @@ If DEMOTE is t, demote the inserted note heading."
   (org-set-tags-to tags)
   (org-fix-tags-on-the-fly))
 
+(defun anki-editor--effective-end (node)
+  "Get the effective end of NODE.
+
+org-element considers whitespaces or newlines after an element or
+object still belong to it, which is to say :end property of an
+element matches :begin property of the following one at the same
+level, if any.  This will make it unable to separate elements with
+their following ones after replacing.  This function 'fixes' this
+by resetting the end to the point after the last character that's
+not blank.  I'm not sure if this works for all cases though :)"
+  (let ((end (org-element-property :end node)))
+    (while (and (>= end (point-min))
+                ;; check if character before END is blank
+                (string-match-p "[[:blank:]\r\n]" (buffer-substring (1- end) end)))
+      (setq end (1- end)))
+    end))
+
 (defun anki-editor--replace-node (node replacer)
   "Replace contents of NODE with the result from applying REPLACER to the contents of NODE."
   (let* ((begin (org-element-property :begin node))
-         (end (- (org-element-property :end node) (org-element-property :post-blank node)))
+         (end (anki-editor--effective-end node))
          (original (delete-and-extract-region begin end))
          (replacement (funcall replacer original)))
     (goto-char begin)
