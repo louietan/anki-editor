@@ -1,4 +1,4 @@
-anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
+anki-editor -- Make Anki Cards in Org-mode
 
 * Installation
 
@@ -64,3 +64,9 @@ anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
 * Demo
 
   [[./demo.gif]]
+
+* Change Log
+
+  *0.1.2*
+  - Make deck/note insertion commands smarter on choosing insertion point
+  - Bug fixes
