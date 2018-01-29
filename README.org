@@ -1,20 +1,18 @@
-anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
+anki-editor -- Make Anki Cards in Org-mode
 
-* Requirements
+* Installation
 
+  *Requirements*
   - [[https://github.com/FooSoft/anki-connect#installation][anki-connect]],
     an Anki add-on required by this package to interact with Anki.
   - curl
 
+  If you have [[http://melpa.org/][MELPA]] in your =package-archives=,
+    just =M-x package-install RET anki-editor RET=, or install it
+    manually by downloading and visiting [[anki-editor.el]] in your
+    emacs buffer, and =M-x package-install-from-buffer RET=.
+
 * Usage
-
-** Installation
-
-   - Clone this repo and add the directory to your Emacs' =load-path=,
-     then =(require 'anki-editor)=.
-   - Or if you use =package.el=, just download
-     [[./anki-editor.el][anki-editor.el]] and visit it in Emacs, then
-     =M-x package-install-file=.
 
 ** The Syntax
 
@@ -51,14 +49,14 @@ anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
 
 ** Command Cheatsheet
 
-   | Command                                       | Brief Description                                             |
-   |-----------------------------------------------+---------------------------------------------------------------|
-   | =anki-editor-submit=                          | Send notes in current buffer to Anki.                         |
-   | =anki-editor-insert-deck=                     | Insert a deck heading with the same level as current heading. |
-   | =anki-editor-insert-note=                     | Insert the skeleton of a note.                                |
-   | =anki-editor-insert-tags=                     | Insert a tag at point with autocompletion.                    |
-   | =anki-editor-export-heading-contents-to-html= | Export the contents of the heading at point to HTML.          |
-   | =anki-editor-convert-region-to-html=          | Convert and replace region to HTML.                           |
+   | Command                                       | Brief Description                                    |
+   |-----------------------------------------------+------------------------------------------------------|
+   | =anki-editor-submit=                          | Send notes in current buffer to Anki.                |
+   | =anki-editor-insert-deck=                     | Insert a deck heading.                               |
+   | =anki-editor-insert-note=                     | Insert the skeleton of a note.                       |
+   | =anki-editor-insert-tags=                     | Insert a tag at point with autocompletion.           |
+   | =anki-editor-export-heading-contents-to-html= | Export the contents of the heading at point to HTML. |
+   | =anki-editor-convert-region-to-html=          | Convert and replace region to HTML.                  |
 
 
 *Since I'm not a native English speaker, let me know if there's any ambiguity or grammatical mistakes.*
@@ -66,3 +64,9 @@ anki-editor -- an Emacs package that helps you create Anki cards in Org-mode
 * Demo
 
   [[./demo.gif]]
+
+* Change Log
+
+  *0.1.2*
+  - Make deck/note insertion commands smarter on choosing insertion point
+  - Bug fixes

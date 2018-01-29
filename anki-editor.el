@@ -1,11 +1,11 @@
-;;; anki-editor.el --- Create Anki Cards in Org-mode
+;;; anki-editor.el --- Make Anki Cards in Org-mode
 ;;
 ;; Copyright (C) 2018 Louie Tan <louietanlei@gmail.com>
 ;;
 ;; Filename: anki-editor.el
-;; Description: Create Anki Cards in Org-mode
+;; Description: Make Anki Cards in Org-mode
 ;; Author: Louie Tan
-;; Version: 0.1.1
+;; Version: 0.1.2
 ;; Package-Requires: ((emacs "25"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
@@ -14,11 +14,31 @@
 ;;; Commentary:
 ;;
 ;;  This package is for people who use Anki as SRS but would like to
-;;  create cards in Org-mode.  It does so by using Org-mode's built-in
-;;  HTML backend to generate HTML with specific syntax (e.g. latex)
-;;  translated to the Anki style, then sends requests to anki-connect
-;;  (an Anki addon that runs an HTTP server to expose Anki functions
-;;  as APIs).
+;;  make cards in Org-mode.
+;;
+;;  With this package, you can make cards from something like:
+;;  (which is inspired by `org-dirll')
+;;
+;;  * Computing                    :deck:
+;;  ** Item                        :note:
+;;     :PROPERTIES:
+;;     :ANKI_NOTE_TYPE: Basic
+;;     :END:
+;;  *** Front
+;;      How to hello world in elisp ?
+;;  *** Back
+;;      #+BEGIN_SRC emacs-lisp
+;;      (message "Hello, world!")
+;;      #+END_SRC
+;;
+;;  This package leverages Org-mode's built-in HTML backend to
+;;  generate HTML for contents of note fields with specific syntax
+;;  (e.g. latex) translated to Anki style, then save the note to Anki.
+;;
+;;  For this package to work, you have to setup these external dependencies:
+;;  - curl
+;;  - AnkiConnect, an Anki addon that runs an HTTP server to expose
+;;                 Anki functions as RESTful APIs
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -170,23 +190,46 @@ of that heading."
 
 ;;;###autoload
 (defun anki-editor-insert-deck (&optional prefix)
-  "Insert a deck heading with the same level as current heading.
-With PREFIX, only insert the deck name."
+  "Insert a deck heading.
+With PREFIX, only insert the deck name at point."
   (interactive "P")
   (message "Fetching decks...")
   (let ((decks (sort (anki-editor--anki-connect-invoke-result "deckNames" 5) #'string-lessp))
         deckname)
     (setq deckname (completing-read "Choose a deck: " decks))
-    (unless prefix (org-insert-heading-respect-content))
-    (insert deckname)
-    (unless prefix (anki-editor--set-tags-fix anki-editor-deck-tag))))
+    (if prefix
+        (insert deckname)
+      (let (inserted)
+        (anki-editor--visit-superior-headings
+         (lambda ()
+           (when (member anki-editor-deck-tag (org-get-tags))
+             (anki-editor--insert-deck-heading deckname)
+             (setq inserted t))))
+
+        (unless inserted
+          (anki-editor--insert-deck-heading deckname))))))
 
 ;;;###autoload
 (defun anki-editor-insert-note ()
   "Insert the skeleton of a note.
+
 The contents to be insrted are structured with a note heading
-that's one level lower to the current one as well as subheadings
-that correspond to fields."
+along with subheadings that correspond to fields.
+
+Where the note is inserted depends on where the point is.
+
+When the point is somewhere inside a note heading, the new note
+is inserted below this note with same heading level.
+
+Or when the point is outside any note heading but inside a
+heading that isn't tagged with 'deck' but under a deck heading,
+the new note is one level lower to and is inserted at the bottom
+of this heading.
+
+Or when the point is inside a deck heading, the behavior is the
+same as above.
+
+Otherwise, it's inserted at point."
   (interactive)
   (message "Fetching note types...")
   (let ((note-types (sort (anki-editor--anki-connect-invoke-result "modelNames" 5) #'string-lessp))
@@ -195,19 +238,39 @@ that correspond to fields."
     (message "Fetching note fields...")
     (setq fields (anki-editor--anki-connect-invoke-result "modelFieldNames" 5 `((modelName . ,note-type)))
           note-heading (read-from-minibuffer "Enter the heading: " "Item"))
-    (org-insert-heading-respect-content)
-    (org-do-demote)
-    (insert note-heading)
-    (anki-editor--set-tags-fix anki-editor-note-tag)
-    (org-set-property (substring (symbol-name anki-editor-prop-note-type) 1) note-type)
-    (dolist (field fields)
-      (save-excursion
-        (org-insert-heading-respect-content)
-        (org-do-demote)
-        (insert field)))
-    (org-next-visible-heading 1)
-    (end-of-line)
-    (newline-and-indent)))
+
+    ;; find and go to the best position, then insert the note
+    (let ((cur-point (point))
+          pt-of-grp
+          inserted)
+      (anki-editor--visit-superior-headings
+       (lambda ()
+         (let ((tags (org-get-tags)))
+           (cond
+            ;; if runs into a note heading, inserts the note heading with
+            ;; the same level
+            ((member anki-editor-note-tag tags)
+             (progn
+               (anki-editor--insert-note-skeleton note-heading note-type fields)
+               (setq inserted t)
+               t))
+            ;; if runs into a deck heading, inserts the note heading one
+            ;; level lower to current deck heading or to the group
+            ;; heading that was visited before
+            ((member anki-editor-deck-tag tags)
+             (progn
+               (when pt-of-grp (goto-char pt-of-grp))
+               (anki-editor--insert-note-skeleton note-heading note-type fields t)
+               (setq inserted t)
+               t))
+            ;; otherwise, consider it as a group heading and save its
+            ;; point for further consideration, then continue
+            (t (progn
+                 (unless pt-of-grp (setq pt-of-grp (point)))
+                 nil))))))
+      (unless inserted
+        (goto-char cur-point)
+        (anki-editor--insert-note-skeleton note-heading note-type fields)))))
 
 ;;;###autoload
 (defun anki-editor-insert-tags ()
@@ -246,7 +309,7 @@ that correspond to fields."
   "Upgrade anki-connect to the latest version.
 
 This will display a confirmation dialog box in Anki asking if you
-want to continue. The upgrading is done by downloading the latest
+want to continue.  The upgrading is done by downloading the latest
 code in the master branch of its Github repo.
 
 This is useful when new version of this package depends on the
@@ -258,6 +321,12 @@ bugfixes or new features of anki-connect."
         (message "anki-connect has been upgraded, you might have to restart Anki to make it in effect.")))))
 
 ;;; Core Functions
+
+(defun anki-editor--insert-deck-heading (deckname)
+  "Insert a deck heading with DECKNAME."
+  (org-insert-heading-respect-content)
+  (insert deckname)
+  (anki-editor--set-tags-fix anki-editor-deck-tag))
 
 (defun anki-editor--process-note-heading (deck)
   "Process note heading at point.
@@ -275,6 +344,28 @@ DECK is used when the action is note creation."
           note (anki-editor--heading-to-note note-elem))
     (push `(deck . ,deck) note)
     (anki-editor--save-note note)))
+
+(defun anki-editor--insert-note-skeleton (heading note-type fields &optional demote)
+  "Insert a note skeleton with HEADING, NOTE-TYPE and FIELDS.
+If DEMOTE is t, demote the inserted note heading."
+  (org-insert-heading-respect-content)
+  (when demote (org-do-demote))
+  (insert heading)
+  (anki-editor--set-tags-fix anki-editor-note-tag)
+  (org-set-property (substring (symbol-name anki-editor-prop-note-type) 1) note-type)
+  (dolist (field fields)
+    (save-excursion
+      (org-insert-heading-respect-content)
+      (org-do-demote)
+      (insert field)))
+
+  ;; TODO: Is it a good idea to automatically move to the first field
+  ;; heading and open a new line ?
+
+  ;; (org-next-visible-heading 1)
+  ;; (end-of-line)
+  ;; (newline-and-indent)
+  )
 
 (defun anki-editor--save-note (note)
   "Request anki-connect for updating or creating NOTE."
@@ -447,15 +538,47 @@ DECK is used when the action is note creation."
   (org-set-tags-to tags)
   (org-fix-tags-on-the-fly))
 
+(defun anki-editor--effective-end (node)
+  "Get the effective end of NODE.
+
+org-element considers whitespaces or newlines after an element or
+object still belong to it, which is to say :end property of an
+element matches :begin property of the following one at the same
+level, if any.  This will make it unable to separate elements with
+their following ones after replacing.  This function 'fixes' this
+by resetting the end to the point after the last character that's
+not blank.  I'm not sure if this works for all cases though :)"
+  (let ((end (org-element-property :end node)))
+    (while (and (>= end (point-min))
+                ;; check if character before END is blank
+                (string-match-p "[[:blank:]\r\n]" (buffer-substring (1- end) end)))
+      (setq end (1- end)))
+    end))
+
 (defun anki-editor--replace-node (node replacer)
   "Replace contents of NODE with the result from applying REPLACER to the contents of NODE."
   (let* ((begin (org-element-property :begin node))
-         (end (- (org-element-property :end node) (org-element-property :post-blank node)))
+         (end (anki-editor--effective-end node))
          (original (delete-and-extract-region begin end))
          (replacement (funcall replacer original)))
     (goto-char begin)
     (insert replacement)
     (cons original replacement)))
+
+(defun anki-editor--visit-superior-headings (visitor &optional level)
+  "Move point to and call VISITOR at each superior heading from point.
+Don't pass LEVEL, it's only used in recursion.
+Stops when VISITOR returns t or point reaches the beginning of buffer."
+  (let (stop)
+    (when (org-at-heading-p)
+      (let ((cur-level (car (org-heading-components))))
+        (when (or (null level) (< cur-level level))
+          (setq level cur-level
+                stop (funcall visitor)))))
+    (when (and (not stop) (/= (point) (point-min)))
+      (org-previous-visible-heading 1)
+      (anki-editor--visit-superior-headings visitor level))))
+
 
 (provide 'anki-editor)
 
