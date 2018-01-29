@@ -89,6 +89,10 @@
   "8765"
   "The port number anki-connect is listening.")
 
+(defcustom anki-editor-latex-clean-cloze
+  nil
+  "If non-nil, successive `}' will be automatically separated by spaces to prevent early-closing of cloze.")
+
 
 ;;; anki-connect
 
@@ -492,18 +496,21 @@ If DEMOTE is t, demote the inserted note heading."
 
 (defun anki-editor--clean-latex (content)
   "Add whitespace between curly braces in CONTENT for compatiblity with cloze regions."
-  (let ((result "")
-        (match (string-match "}}" content)))
-    (while match
-      (setq result (replace-match "} } " nil nil content))
-      (message result)
-      ;; step 1 back in case we have more than two }
-      (setq match (string-match "}}" result (- match 1))))
-    result))
+  ;; `save-match-data' prevent issues for callers performing their own matching
+  (save-match-data
+    (let ((result content)
+          (match (string-match "}}" content)))
+      (while match
+        (setq result (replace-match "} } " nil nil result))
+        ;; step 1 back in case we have more than two }
+        (setq match (string-match "}}" result (- match 1))))
+      result)))
 
 (defun anki-editor--wrap-latex (content)
   "Wrap CONTENT with Anki-style latex markers."
-  (format "[latex]%s[/latex]" (anki-editor--clean-latex content)))
+  (format "[latex]%s[/latex]" (if anki-editor-latex-clean-cloze
+                                  (anki-editor--clean-latex content)
+                                content)))
 
 (defun anki-editor--convert-latex-fragment (frag)
   "Convert latex fragment FRAG to Anki-style."
