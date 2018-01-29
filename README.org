@@ -58,6 +58,8 @@ anki-editor -- Make Anki Cards in Org-mode
    | =anki-editor-export-heading-contents-to-html= | Export the contents of the heading at point to HTML. |
    | =anki-editor-convert-region-to-html=          | Convert and replace region to HTML.                  |
 
+Note that =anki-editor-submit= will fail if the deck does not exist
+yet. New decks must be created in Anki first.
 
 *Since I'm not a native English speaker, let me know if there's any ambiguity or grammatical mistakes.*
 
