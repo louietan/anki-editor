@@ -89,7 +89,7 @@
   "8765"
   "The port number anki-connect is listening.")
 
-(defcustom anki-editor-latex-clean-cloze
+(defcustom anki-editor-latex-clean-for-cloze
   nil
   "If non-nil, successive `}' will be automatically separated by spaces to prevent early-closing of cloze.")
 
@@ -508,7 +508,7 @@ If DEMOTE is t, demote the inserted note heading."
 
 (defun anki-editor--wrap-latex (content)
   "Wrap CONTENT with Anki-style latex markers."
-  (format "[latex]%s[/latex]" (if anki-editor-latex-clean-cloze
+  (format "[latex]%s[/latex]" (if anki-editor-latex-clean-for-cloze
                                   (anki-editor--clean-latex content)
                                 content)))
 
