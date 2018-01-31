@@ -55,6 +55,7 @@ anki-editor -- Make Anki Cards in Org-mode
    | =anki-editor-insert-deck=                     | Insert a deck heading.                               |
    | =anki-editor-insert-note=                     | Insert the skeleton of a note.                       |
    | =anki-editor-insert-tags=                     | Insert a tag at point with autocompletion.           |
+   | =anki-editor-cloze-region=                    | Cloze region.                                        |
    | =anki-editor-export-heading-contents-to-html= | Export the contents of the heading at point to HTML. |
    | =anki-editor-convert-region-to-html=          | Convert and replace region to HTML.                  |
 

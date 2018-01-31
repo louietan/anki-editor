@@ -280,6 +280,20 @@ Otherwise, it's inserted at point."
     (while t (insert (format " %s" (completing-read "Choose a tag: " tags))))))
 
 ;;;###autoload
+(defun anki-editor-cloze-region (&optional arg)
+  "Cloze region with number ARG."
+  (interactive "p")
+  (unless (region-active-p) (error "No active region"))
+  (let ((region (buffer-substring (region-beginning) (region-end)))
+        (hint (read-from-minibuffer "Hint (optional): ")))
+    (save-excursion
+      (delete-region (region-beginning) (region-end))
+      (insert (with-output-to-string
+                (princ (format "{{c%d::%s" (or arg 1) region))
+                (unless (string-empty-p (string-trim hint)) (princ (format "::%s" hint)))
+                (princ "}}"))))))
+
+;;;###autoload
 (defun anki-editor-export-heading-contents-to-html ()
   "Export the contents of the heading at point to HTML."
   (interactive)
