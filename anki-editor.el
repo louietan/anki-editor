@@ -339,6 +339,7 @@ DECK is used when the action is note creation."
                                     (org-element-property :begin note-elem)
                                     (org-element-property :end note-elem))))
                       (with-temp-buffer
+                        (org-mode)
                         (insert content)
                         (car (org-element-contents (org-element-parse-buffer)))))
           note (anki-editor--heading-to-note note-elem))
