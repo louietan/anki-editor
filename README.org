@@ -1,3 +1,5 @@
+[[http://melpa.org/#/anki-editor][file:http://melpa.org/packages/anki-editor-badge.svg]]
+
 anki-editor -- Make Anki Cards in Org-mode
 
 * Installation
