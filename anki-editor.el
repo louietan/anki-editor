@@ -179,6 +179,7 @@ of that heading."
           ((member anki-editor-note-tag current-tags)
            (progn
              (setq total (1+ total))
+             (message "Processing note at %d..." (point))
              (anki-editor--clear-failure-reason)
              (condition-case err
                  (anki-editor--process-note-heading current-deck)
