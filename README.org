@@ -70,6 +70,12 @@ yet. New decks must be created in Anki first.
 
 * Change Log
 
-  *0.1.2*
-  - Make deck/note insertion commands smarter on choosing insertion point
-  - Bug fixes
+  *v0.2.0*
+  - Fix =org-element= not functioning correctly in temp buffer.
+  - Add a command to cloze region.
+  - Refactor the code to do the translation with Org's exporting framework.
+  - Add a customization variable to break consecutive braces in latex.
+
+  *v0.1.2*
+  - Make deck/note insertion commands smarter on choosing insertion point.
+  - Fix latex environments being joined with the elements following it.
