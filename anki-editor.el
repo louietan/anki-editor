@@ -61,13 +61,13 @@
 
 (require 'json)
 (require 'org-element)
-
+(require 'ox)
 
 (defconst anki-editor-prop-note-type :ANKI_NOTE_TYPE)
 (defconst anki-editor-prop-note-tags :ANKI_TAGS)
 (defconst anki-editor-prop-note-id :ANKI_NOTE_ID)
 (defconst anki-editor-prop-failure-reason :ANKI_FAILURE_REASON)
-(defconst anki-editor-buffer-html-output "*anki-editor HTML Output*")
+(defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
 
 (defgroup anki-editor nil
   "Customizations for anki-editor."
@@ -83,17 +83,17 @@
 
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
-  "The network address anki-connect is listening.")
+  "The network address AnkiConnect is listening.")
 
 (defcustom anki-editor-anki-connect-listening-port
   "8765"
-  "The port number anki-connect is listening.")
+  "The port number AnkiConnect is listening.")
 
 
-;;; anki-connect
+;;; AnkiConnect
 
 (defun anki-editor--anki-connect-invoke (action version &optional params)
-  "Invoke anki-connect with ACTION, VERSION and PARAMS."
+  "Invoke AnkiConnect with ACTION, VERSION and PARAMS."
   (let* ((data `(("action" . ,action)
                  ("version" . ,version)))
          (request-body (json-encode
@@ -113,21 +113,19 @@
                               (shell-quote-argument anki-editor-anki-connect-listening-port)
                               (shell-quote-argument request-tempfile))))
            resp error)
-
-      (when (file-exists-p request-tempfile) (delete-file request-tempfile))
       (condition-case err
           (let ((json-array-type 'list))
             (setq resp (json-read-from-string raw-resp)
                   error (alist-get 'error resp)))
         (error (setq error
-                     (format "Unexpected error communicating with anki-connect: %s, the response was %s"
+                     (format "Unexpected error communicating with AnkiConnect: %s, the response was %s"
                              (error-message-string err)
                              (prin1-to-string raw-resp)))))
       `((result . ,(alist-get 'result resp))
         (error . ,error)))))
 
 (defmacro anki-editor--anki-connect-invoke-result (&rest args)
-  "Invoke anki-connect with ARGS, return the result from response or raise an error."
+  "Invoke AnkiConnect with ARGS, return the result from response or raise an error."
   `(let* ((resp (anki-editor--anki-connect-invoke ,@args))
           (rslt (alist-get 'result resp))
           (err (alist-get 'error resp)))
@@ -135,19 +133,19 @@
      rslt))
 
 (defun anki-editor--anki-connect-map-note (note)
-  "Convert NOTE to the form that anki-connect accepts."
+  "Convert NOTE to the form that AnkiConnect accepts."
   (let-alist note
     (list (cons "id" .note-id)
           (cons "deckName" .deck)
           (cons "modelName" .note-type)
           (cons "fields" .fields)
           ;; Convert tags to a vector since empty list is identical to nil
-          ;; which will become None in Python, but anki-connect requires it
+          ;; which will become None in Python, but AnkiConnect requires it
           ;; to be type of list.
           (cons "tags" (vconcat .tags)))))
 
 (defun anki-editor--anki-connect-heading-to-note (heading)
-  "Convert HEADING to a note in the form that anki-connect accepts."
+  "Convert HEADING to a note in the form that AnkiConnect accepts."
   (anki-editor--anki-connect-map-note
    (anki-editor--heading-to-note heading)))
 
@@ -183,6 +181,7 @@ of that heading."
                         (setq failed (1+ failed))
                         (anki-editor--set-failure-reason (error-message-string err))))))))))
      (mapconcat 'identity `(,anki-editor-deck-tag ,anki-editor-note-tag) "|"))
+
     (message (with-output-to-string
                (princ (format "Submitted %d notes, with %d failed." total failed))
                (when (> failed 0)
@@ -200,7 +199,7 @@ With PREFIX, only insert the deck name at point."
     (if prefix
         (insert deckname)
       (let (inserted)
-        (anki-editor--visit-superior-headings
+        (anki-editor--visit-ancestor-headings
          (lambda ()
            (when (member anki-editor-deck-tag (org-get-tags))
              (anki-editor--insert-deck-heading deckname)
@@ -229,7 +228,7 @@ of this heading.
 Or when the point is inside a deck heading, the behavior is the
 same as above.
 
-Otherwise, it's inserted at point."
+Otherwise, it's inserted below current heading at point."
   (interactive)
   (message "Fetching note types...")
   (let ((note-types (sort (anki-editor--anki-connect-invoke-result "modelNames" 5) #'string-lessp))
@@ -243,7 +242,7 @@ Otherwise, it's inserted at point."
     (let ((cur-point (point))
           pt-of-grp
           inserted)
-      (anki-editor--visit-superior-headings
+      (anki-editor--visit-ancestor-headings
        (lambda ()
          (let ((tags (org-get-tags)))
            (cond
@@ -274,7 +273,7 @@ Otherwise, it's inserted at point."
 
 ;;;###autoload
 (defun anki-editor-insert-tags ()
-  "Insert a tag at point with autocompletion."
+  "Insert tags at point with autocompletion."
   (interactive)
   (let ((tags (sort (anki-editor--anki-connect-invoke-result "getTags" 5) #'string-lessp)))
     (while t (insert (format " %s" (completing-read "Choose a tag: " tags))))))
@@ -297,42 +296,41 @@ Otherwise, it's inserted at point."
 (defun anki-editor-export-heading-contents-to-html ()
   "Export the contents of the heading at point to HTML."
   (interactive)
-  (let ((tree (org-element-at-point))
-        contents)
+  (let* ((tree (org-element-at-point))
+         (contents (or (and (org-element-property :contents-begin tree)
+                            (org-element-property :contents-end tree)
+                            (buffer-substring (org-element-property :contents-begin tree)
+                                              (org-element-property :contents-end tree)))
+                       "")))
     (if (or (null tree)
             (not (eq (org-element-type tree) 'headline)))
         (error "No element at point or it's not a heading")
-
-      (setq contents (buffer-substring-no-properties (org-element-property :contents-begin tree)
-                                                     (org-element-property :contents-end tree)))
       (when (buffer-live-p (get-buffer anki-editor-buffer-html-output))
         (kill-buffer anki-editor-buffer-html-output))
       (switch-to-buffer-other-window (get-buffer-create anki-editor-buffer-html-output))
-      (insert (anki-editor--generate-html contents)))))
+      (insert (org-export-string-as contents anki-editor--ox-anki-html-backend t)))))
 
 ;;;###autoload
 (defun anki-editor-convert-region-to-html ()
   "Convert and replace region to HTML."
   (interactive)
-  (unless (region-active-p) (error "No active region"))
-  (insert (anki-editor--generate-html
-           (delete-and-extract-region (region-beginning) (region-end)))))
+  (org-export-replace-region-by anki-editor--ox-anki-html-backend))
 
 ;;;###autoload
 (defun anki-editor-anki-connect-upgrade ()
-  "Upgrade anki-connect to the latest version.
+  "Upgrade AnkiConnect to the latest version.
 
 This will display a confirmation dialog box in Anki asking if you
 want to continue.  The upgrading is done by downloading the latest
 code in the master branch of its Github repo.
 
 This is useful when new version of this package depends on the
-bugfixes or new features of anki-connect."
+bugfixes or new features of AnkiConnect."
   (interactive)
-  (when (yes-or-no-p "NOTE: This will download the latest codebase of anki-connect to your system, which is not guaranteed to be safe or stable. Generally, you don't need this command, this is useful only when new version of this package requires the updates of anki-connect that are not released yet. Do you still want to continue?")
+  (when (yes-or-no-p "NOTE: This will download the latest codebase of AnkiConnect to your system, which is not guaranteed to be safe or stable. Generally, you don't need this command, this is useful only when new version of this package requires the updates of AnkiConnect that are not released yet. Do you still want to continue?")
     (let ((result (anki-editor--anki-connect-invoke-result "upgrade" 5)))
       (when (and (booleanp result) result)
-        (message "anki-connect has been upgraded, you might have to restart Anki to make it in effect.")))))
+        (message "AnkiConnect has been upgraded, you might have to restart Anki to make it in effect.")))))
 
 ;;; Core Functions
 
@@ -372,35 +370,28 @@ If DEMOTE is t, demote the inserted note heading."
     (save-excursion
       (org-insert-heading-respect-content)
       (org-do-demote)
-      (insert field)))
-
-  ;; TODO: Is it a good idea to automatically move to the first field
-  ;; heading and open a new line ?
-
-  ;; (org-next-visible-heading 1)
-  ;; (end-of-line)
-  ;; (newline-and-indent)
-  )
+      (insert field))))
 
 (defun anki-editor--save-note (note)
-  "Request anki-connect for updating or creating NOTE."
+  "Request AnkiConnect for updating or creating NOTE."
   (if (= (alist-get 'note-id note) -1)
       (anki-editor--create-note note)
     (anki-editor--update-note note)))
 
 (defun anki-editor--create-note (note)
-  "Request anki-connect for creating NOTE."
+  "Request AnkiConnect for creating NOTE."
   (let* ((response (anki-editor--anki-connect-invoke
                     "addNote" 5 `((note . ,(anki-editor--anki-connect-map-note note)))))
          (result (alist-get 'result response))
          (err (alist-get 'error response)))
     (if result
+        ;; put ID of newly created note in property drawer
         (org-set-property (substring (symbol-name anki-editor-prop-note-id) 1)
                           (format "%d" (alist-get 'result response)))
       (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
 
 (defun anki-editor--update-note (note)
-  "Request anki-connect for updating fields and tags of NOTE."
+  "Request AnkiConnect for updating fields and tags of NOTE."
   (anki-editor--anki-connect-invoke-result
    "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note))))
 
@@ -422,11 +413,11 @@ If DEMOTE is t, demote the inserted note heading."
 
 (defun anki-editor--set-failure-reason (reason)
   "Set failure reason to REASON in property drawer at point."
-  (org-set-property (substring (symbol-name anki-editor-prop-failure-reason) 1) reason))
+  (org-entry-put nil (substring (symbol-name anki-editor-prop-failure-reason) 1) reason))
 
 (defun anki-editor--clear-failure-reason ()
   "Clear failure reason in property drawer at point."
-  (org-delete-property (substring (symbol-name anki-editor-prop-failure-reason) 1)))
+  (org-entry-delete nil (substring (symbol-name anki-editor-prop-failure-reason) 1)))
 
 (defun anki-editor--heading-to-note (heading)
   "Construct an alist representing a note for HEADING."
@@ -444,11 +435,6 @@ If DEMOTE is t, demote the inserted note heading."
       (tags . ,(and tags (split-string tags " ")))
       (fields . ,fields))))
 
-(defun anki-editor--get-subheadings (heading)
-  "Get all the subheadings of HEADING."
-  (org-element-map (org-element-contents heading)
-      'headline 'identity nil nil 'headline))
-
 (defun anki-editor--heading-to-note-field (heading)
   "Convert HEADING to field data, a cons cell, the car of which is the field name, the cdr of which is contens represented in HTML."
   (let ((field-name (substring-no-properties
@@ -456,46 +442,19 @@ If DEMOTE is t, demote the inserted note heading."
                       :raw-value
                       heading)))
         (contents (org-element-contents heading)))
-    `(,field-name . ,(anki-editor--generate-html
-                      (org-element-interpret-data contents)))))
+    `(,field-name . ,(org-export-string-as
+                      (org-element-interpret-data contents)
+                      anki-editor--ox-anki-html-backend t))))
 
-(defun anki-editor--generate-html (contents)
-  "Convert CONTENTS to HTML."
-  (with-temp-buffer
-    (org-mode)
-    (insert contents)
-    (setq anki-editor--replacement-records nil)
-    (anki-editor--replace-latex)
-    (anki-editor--buffer-to-html)
-    (anki-editor--translate-latex)
-    (buffer-substring-no-properties (point-min) (point-max))))
+;;; Org Export Backend
 
-;; Transformers
+(defconst anki-editor--ox-anki-html-backend
+  (org-export-create-backend
+   :parent 'html
+   :transcoders '((latex-fragment . anki-editor--ox-latex)
+                  (latex-environment . anki-editor--ox-latex))))
 
-(defun anki-editor--buffer-to-html ()
-  "Transform contents of buffer to HTML."
-  (when (> (buffer-size) 0)
-    (insert
-     (org-export-string-as
-      (delete-and-extract-region (point-min) (point-max)) 'html t))))
-
-(defun anki-editor--replace-latex ()
-  "Replace latex objects with the hash of it's content."
-  (let (object type memo)
-    (while (setq object (org-element-map
-                            (org-element-parse-buffer)
-                            '(latex-fragment latex-environment) 'identity nil t))
-
-      (setq type (org-element-type object)
-            memo (anki-editor--replace-node object
-                                            (lambda (original)
-                                              (anki-editor--hash type
-                                                                 original))))
-      (push `(,(cdr memo) . ((type . ,type)
-                             (original . ,(car memo))))
-            anki-editor--replacement-records))))
-
-(defvar anki-editor--anki-latex-syntax-map
+(defconst anki-editor--anki-latex-syntax-map
   `((,(format "^%s" (regexp-quote "$$")) . "[$$]")
     (,(format "%s$" (regexp-quote "$$")) . "[/$$]")
     (,(format "^%s" (regexp-quote "$")) . "[$]")
@@ -509,68 +468,37 @@ If DEMOTE is t, demote the inserted note heading."
   "Wrap CONTENT with Anki-style latex markers."
   (format "[latex]%s[/latex]" content))
 
-(defun anki-editor--convert-latex-fragment (frag)
-  "Convert latex fragment FRAG to Anki-style."
-  (let ((copy frag))
+(defun anki-editor--ox-latex (latex contents info)
+  "Transcode LATEX from Org to HTML.
+CONTENTS is nil.  INFO is a plist holding contextual information."
+  (let* ((code (org-element-property :value latex))
+         (copy code))
+    ;; translate delimiters
     (dolist (map anki-editor--anki-latex-syntax-map)
-      (setq frag (replace-regexp-in-string (car map) (cdr map) frag t t)))
-    (if (equal copy frag)
-        (anki-editor--wrap-latex frag)
-      frag)))
+      (setq code (replace-regexp-in-string (car map) (cdr map) code t t)))
 
-(defun anki-editor--translate-latex ()
-  "Transform latex objects that were previously replaced with hashes to Anki-style."
-  (let (ele-data translated)
-    (dolist (record anki-editor--replacement-records)
-      (setq ele-data (cdr record))
-      (goto-char (point-min))
-      (when (search-forward (car record) nil t)
-        (pcase (alist-get 'type ele-data)
-          ('latex-fragment (replace-match (anki-editor--convert-latex-fragment (alist-get 'original ele-data)) t t))
-          ('latex-environment (replace-match (anki-editor--wrap-latex (alist-get 'original ele-data)) t t)))
-        (push record translated)))
-    (setq anki-editor--replacement-records (cl-set-difference anki-editor--replacement-records translated))))
+    (if (equal copy code)
+        (anki-editor--wrap-latex
+         (if (eq (org-element-type latex) 'latex-fragment)
+             code
+           (format "\n<pre>\n%s</pre>\n"
+                   (org-remove-indentation code))))
+      code)))
 
 ;;; Utilities
-
-(defun anki-editor--hash (type text)
-  "Compute hash of object, whose type and contens is TYPE and TEXT respectively."
-  (sha1 (format "%s %s" (symbol-name type) text)))
 
 (defun anki-editor--set-tags-fix (tags)
   "Set tags to TAGS and fix tags on the fly."
   (org-set-tags-to tags)
   (org-fix-tags-on-the-fly))
 
-(defun anki-editor--effective-end (node)
-  "Get the effective end of NODE.
+(defun anki-editor--get-subheadings (heading)
+  "Get all the subheadings of HEADING."
+  (org-element-map (org-element-contents heading)
+      'headline 'identity nil nil 'headline))
 
-org-element considers whitespaces or newlines after an element or
-object still belong to it, which is to say :end property of an
-element matches :begin property of the following one at the same
-level, if any.  This will make it unable to separate elements with
-their following ones after replacing.  This function 'fixes' this
-by resetting the end to the point after the last character that's
-not blank.  I'm not sure if this works for all cases though :)"
-  (let ((end (org-element-property :end node)))
-    (while (and (>= end (point-min))
-                ;; check if character before END is blank
-                (string-match-p "[[:blank:]\r\n]" (buffer-substring (1- end) end)))
-      (setq end (1- end)))
-    end))
-
-(defun anki-editor--replace-node (node replacer)
-  "Replace contents of NODE with the result from applying REPLACER to the contents of NODE."
-  (let* ((begin (org-element-property :begin node))
-         (end (anki-editor--effective-end node))
-         (original (delete-and-extract-region begin end))
-         (replacement (funcall replacer original)))
-    (goto-char begin)
-    (insert replacement)
-    (cons original replacement)))
-
-(defun anki-editor--visit-superior-headings (visitor &optional level)
-  "Move point to and call VISITOR at each superior heading from point.
+(defun anki-editor--visit-ancestor-headings (visitor &optional level)
+  "Move point to and call VISITOR at each ancestor heading from point.
 Don't pass LEVEL, it's only used in recursion.
 Stops when VISITOR returns t or point reaches the beginning of buffer."
   (let (stop)
@@ -581,7 +509,7 @@ Stops when VISITOR returns t or point reaches the beginning of buffer."
                 stop (funcall visitor)))))
     (when (and (not stop) (/= (point) (point-min)))
       (org-previous-visible-heading 1)
-      (anki-editor--visit-superior-headings visitor level))))
+      (anki-editor--visit-ancestor-headings visitor level))))
 
 
 (provide 'anki-editor)
