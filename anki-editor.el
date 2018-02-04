@@ -81,6 +81,11 @@
   "deck"
   "Headings with this tag will be considered as decks.")
 
+(defcustom anki-editor-break-consecutive-braces-in-latex
+  nil
+  "If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze.
+See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
+
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
   "The network address AnkiConnect is listening.")
@@ -477,12 +482,15 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
     (dolist (map anki-editor--anki-latex-syntax-map)
       (setq code (replace-regexp-in-string (car map) (cdr map) code t t)))
 
-    (if (equal copy code)
-        (anki-editor--wrap-latex
-         (if (eq (org-element-type latex) 'latex-fragment)
-             code
-           (format "\n<pre>\n%s</pre>\n"
-                   (org-remove-indentation code))))
+    (when (equal copy code)
+      (setq code (anki-editor--wrap-latex
+                  (if (eq (org-element-type latex) 'latex-fragment)
+                      code
+                    (format "\n<pre>\n%s</pre>\n"
+                            (org-remove-indentation code))))))
+
+    (if anki-editor-break-consecutive-braces-in-latex
+        (replace-regexp-in-string "}}" "} } " code)
       code)))
 
 ;;; Utilities
