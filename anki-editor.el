@@ -94,6 +94,10 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
   "8765"
   "The port number AnkiConnect is listening.")
 
+(defcustom anki-editor-break-braces-in-latex
+  nil
+  "If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze.")
+
 
 ;;; AnkiConnect
 
@@ -469,9 +473,24 @@ If DEMOTE is t, demote the inserted note heading."
     (,(format "^%s" (regexp-quote "\\[")) . "[$$]")
     (,(format "%s$" (regexp-quote "\\]")) . "[/$$]")))
 
+(defun anki-editor--clean-latex (content)
+  "Add whitespace between curly braces in CONTENT for compatiblity with cloze regions."
+  ;; `save-match-data' prevent issues for callers performing their own matching
+  (save-match-data
+    (let ((result content)
+          (match (string-match "}}" content)))
+      (while match
+        (setq result (replace-match "} }" nil nil result))
+        ;; search from matched-index to cover case of
+        ;; "}}}" => "} }}" => "} } }"
+        (setq match (string-match "}}" result match)))
+      result)))
+
 (defun anki-editor--wrap-latex (content)
   "Wrap CONTENT with Anki-style latex markers."
-  (format "[latex]%s[/latex]" content))
+  (format "[latex]%s[/latex]" (if anki-editor-break-braces-in-latex
+                                  (anki-editor--clean-latex content)
+                                content)))
 
 (defun anki-editor--ox-latex (latex contents info)
   "Transcode LATEX from Org to HTML.
