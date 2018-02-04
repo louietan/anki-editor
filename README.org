@@ -54,10 +54,13 @@ anki-editor -- Make Anki Cards in Org-mode
    | =anki-editor-submit=                          | Send notes in current buffer to Anki.                |
    | =anki-editor-insert-deck=                     | Insert a deck heading.                               |
    | =anki-editor-insert-note=                     | Insert the skeleton of a note.                       |
-   | =anki-editor-insert-tags=                     | Insert a tag at point with autocompletion.           |
+   | =anki-editor-insert-tags=                     | Insert tags at point with autocompletion.            |
+   | =anki-editor-cloze-region=                    | Cloze region.                                        |
    | =anki-editor-export-heading-contents-to-html= | Export the contents of the heading at point to HTML. |
    | =anki-editor-convert-region-to-html=          | Convert and replace region to HTML.                  |
 
+Note that =anki-editor-submit= will fail if the deck does not exist
+yet. New decks must be created in Anki first.
 
 *Since I'm not a native English speaker, let me know if there's any ambiguity or grammatical mistakes.*
 
@@ -67,6 +70,12 @@ anki-editor -- Make Anki Cards in Org-mode
 
 * Change Log
 
-  *0.1.2*
-  - Make deck/note insertion commands smarter on choosing insertion point
-  - Bug fixes
+  *v0.2.0*
+  - Fix =org-element= not functioning correctly in temp buffer.
+  - Add a command to cloze region.
+  - Refactor the code to do the translation with Org's exporting framework.
+  - Add a customization variable to break consecutive braces in latex.
+
+  *v0.1.2*
+  - Make deck/note insertion commands smarter on choosing insertion point.
+  - Fix latex environments being joined with the elements following it.
