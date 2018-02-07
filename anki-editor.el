@@ -154,6 +154,31 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
   (anki-editor--anki-connect-map-note
    (anki-editor--heading-to-note heading)))
 
+(defun anki-editor--anki-connect-store-media-file (path)
+  "Store media file for PATH, which is an absolute file name.
+The result is the path to the newly stored media file."
+  (unless (and (executable-find "base64")
+               (executable-find "sha1sum"))
+    (error "Please make sure `base64' and `sha1sum' are available from your shell, which are required for storing media files"))
+
+  (let* ((content (string-trim
+                   (shell-command-to-string
+                    (format "base64 --wrap=0 %s"
+                            (shell-quote-argument path)))))
+         (hash (string-trim
+                (shell-command-to-string
+                 (format "sha1sum %s | awk '{print $1}'"
+                         (shell-quote-argument path)))))
+         (media-file-name (format "%s-%s%s"
+                                  (file-name-base path)
+                                  hash
+                                  (file-name-extension path t))))
+    (anki-editor--anki-connect-invoke-result
+     "storeMediaFile" 5
+     `((filename . ,media-file-name)
+       (data . ,content)))
+    media-file-name))
+
 ;;; Commands
 
 ;;;###autoload
@@ -458,7 +483,8 @@ If DEMOTE is t, demote the inserted note heading."
   (org-export-create-backend
    :parent 'html
    :transcoders '((latex-fragment . anki-editor--ox-latex)
-                  (latex-environment . anki-editor--ox-latex))))
+                  (latex-environment . anki-editor--ox-latex)
+                  (link . anki-editor--ox-link))))
 
 (defconst anki-editor--anki-latex-syntax-map
   `((,(format "^%s" (regexp-quote "$$")) . "[$$]")
@@ -493,6 +519,146 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
     (if anki-editor-break-consecutive-braces-in-latex
         (replace-regexp-in-string "}}" "} } " code)
       code)))
+
+(defun anki-editor--ox-link (link desc info)
+  "Transcode a LINK object from Org to HTML.
+DESC is the description part of the link, or the empty string.
+INFO is a plist holding contextual information.  THE
+IMPLEMENTATION IS BASICALLY COPIED AND SIMPLIFIED FROM
+ox-html.el :)"
+  (let* ((type (org-element-property :type link))
+         (raw-path (org-element-property :path link))
+         ;; Ensure DESC really exists, or set it to nil.
+         (desc (org-string-nw-p desc))
+         (path
+          (cond
+           ((member type '("http" "https" "ftp" "mailto" "news"))
+            (url-encode-url (org-link-unescape (concat type ":" raw-path))))
+           ((string= type "file")
+            ;; Possibly append `:html-link-home' to relative file
+            ;; name.
+            (let ((home (and (plist-get info :html-link-home)
+                             (org-trim (plist-get info :html-link-home)))))
+              (when (and home
+                         (plist-get info :html-link-use-abs-url)
+                         (file-name-absolute-p raw-path))
+                (setq raw-path (concat (file-name-as-directory home) raw-path)))
+              (message "Storing media file to Anki for %s..." raw-path)
+              (anki-editor--anki-connect-store-media-file (expand-file-name raw-path))))
+           (t raw-path)))
+          ;; Extract attributes from parent's paragraph.  HACK: Only do
+          ;; this for the first link in parent (inner image link for
+          ;; inline images).  This is needed as long as attributes
+          ;; cannot be set on a per link basis.
+          (attributes-plist
+           (let* ((parent (org-export-get-parent-element link))
+                  (link (let ((container (org-export-get-parent link)))
+                          (if (and (eq (org-element-type container) 'link)
+                                   (org-html-inline-image-p link info))
+                              container
+                            link))))
+             (and (eq (org-element-map parent 'link 'identity info t) link)
+                  (org-export-read-attribute :attr_html parent))))
+          (attributes
+           (let ((attr (org-html--make-attribute-string attributes-plist)))
+             (if (org-string-nw-p attr) (concat " " attr) ""))))
+         (cond
+          ;; Image file.
+          ((and (plist-get info :html-inline-images)
+                (org-export-inline-image-p
+                 link (plist-get info :html-inline-image-rules)))
+           (org-html--format-image path attributes-plist info))
+          ;; Radio target: Transcode target's contents and use them as
+          ;; link's description.
+          ((string= type "radio")
+           (let ((destination (org-export-resolve-radio-link link info)))
+             (if (not destination) desc
+               (format "<a href=\"#%s\"%s>%s</a>"
+                       (org-export-get-reference destination info)
+                       attributes
+                       desc))))
+          ;; Links pointing to a headline: Find destination and build
+          ;; appropriate referencing command.
+          ((member type '("custom-id" "fuzzy" "id"))
+           (let ((destination (if (string= type "fuzzy")
+                                  (org-export-resolve-fuzzy-link link info)
+                                (org-export-resolve-id-link link info))))
+             (pcase (org-element-type destination)
+               ;; ID link points to an external file.
+               (`plain-text
+                (let ((fragment (concat "ID-" path)))
+                  (format "<a href=\"%s#%s\"%s>%s</a>"
+                          destination fragment attributes (or desc destination))))
+               ;; Fuzzy link points nowhere.
+               (`nil
+                (format "<i>%s</i>"
+                        (or desc
+                            (org-export-data
+                             (org-element-property :raw-link link) info))))
+               ;; Link points to a headline.
+               (`headline
+                (let ((href (or (org-element-property :CUSTOM_ID destination)
+                                (org-export-get-reference destination info)))
+                      ;; What description to use?
+                      (desc
+                       ;; Case 1: Headline is numbered and LINK has no
+                       ;; description.  Display section number.
+                       (if (and (org-export-numbered-headline-p destination info)
+                                (not desc))
+                           (mapconcat #'number-to-string
+                                      (org-export-get-headline-number
+                                       destination info) ".")
+                         ;; Case 2: Either the headline is un-numbered or
+                         ;; LINK has a custom description.  Display LINK's
+                         ;; description or headline's title.
+                         (or desc
+                             (org-export-data
+                              (org-element-property :title destination) info)))))
+                  (format "<a href=\"#%s\"%s>%s</a>" href attributes desc)))
+               ;; Fuzzy link points to a target or an element.
+               (_
+                (let* ((ref (org-export-get-reference destination info))
+                       (org-html-standalone-image-predicate
+                        #'org-html--has-caption-p)
+                       (number (cond
+                                (desc nil)
+                                ((org-html-standalone-image-p destination info)
+                                 (org-export-get-ordinal
+                                  (org-element-map destination 'link
+                                    #'identity info t)
+                                  info 'link 'org-html-standalone-image-p))
+                                (t (org-export-get-ordinal
+                                    destination info nil 'org-html--has-caption-p))))
+                       (desc (cond (desc)
+                                   ((not number) "No description for this link")
+                                   ((numberp number) (number-to-string number))
+                                   (t (mapconcat #'number-to-string number ".")))))
+                  (format "<a href=\"#%s\"%s>%s</a>" ref attributes desc))))))
+          ;; Coderef: replace link with the reference name or the
+          ;; equivalent line number.
+          ((string= type "coderef")
+           (let ((fragment (concat "coderef-" (org-html-encode-plain-text path))))
+             (format "<a href=\"#%s\" %s%s>%s</a>"
+                     fragment
+                     (format "class=\"coderef\" onmouseover=\"CodeHighlightOn(this, \
+'%s');\" onmouseout=\"CodeHighlightOff(this, '%s');\""
+                             fragment fragment)
+                     attributes
+                     (format (org-export-get-coderef-format path desc)
+                             (org-export-resolve-coderef path info)))))
+          ;; External link with a description part.
+          ((and path desc) (format "<a href=\"%s\"%s>%s</a>"
+                                   (org-html-encode-plain-text path)
+                                   attributes
+                                   desc))
+          ;; External link without a description part.
+          (path (let ((path (org-html-encode-plain-text path)))
+                  (format "<a href=\"%s\"%s>%s</a>"
+                          path
+                          attributes
+                          (org-link-unescape path))))
+          ;; No path, only description.  Try to do something useful.
+          (t (format "<i>%s</i>" desc)))))
 
 ;;; Utilities
 
