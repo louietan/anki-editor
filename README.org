@@ -73,6 +73,11 @@ anki-editor -- Make Anki Cards in Org-mode
 
 * Change Log
 
+  *v0.2.1*
+  - Automatically store media files for links to file when submitting.
+  - =anki-editor-insert-tags= renamed to =anki-editor-add-tags=.
+  - =anki-editor-add-tags= renamed to =anki-editor-export-subtree-to-html=.
+
   *v0.2.0*
   - Fix =org-element= not functioning correctly in temp buffer.
   - Add a command to cloze region.
