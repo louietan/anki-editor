@@ -303,11 +303,23 @@ Otherwise, it's inserted below current heading at point."
         (anki-editor--insert-note-skeleton note-heading note-type fields)))))
 
 ;;;###autoload
-(defun anki-editor-insert-tags ()
-  "Insert tags at point with autocompletion."
+(defun anki-editor-add-tags ()
+  "Add tags to property drawer of current heading with autocompletion."
   (interactive)
-  (let ((tags (sort (anki-editor--anki-connect-invoke-result "getTags" 5) #'string-lessp)))
-    (while t (insert (format " %s" (completing-read "Choose a tag: " tags))))))
+  (let ((tags (sort (anki-editor--anki-connect-invoke-result "getTags" 5) #'string-lessp))
+        (prop (substring (symbol-name anki-editor-prop-note-tags) 1)))
+    (while t
+      (let ((existing (or (org-entry-get nil prop) "")))
+        (org-entry-put
+         nil prop
+         (concat
+          existing
+          (format " %s"
+                  (completing-read "Choose a tag: "
+                                   (cl-set-difference
+                                    tags
+                                    (split-string existing " ")
+                                    :test #'string-equal)))))))))
 
 ;;;###autoload
 (defun anki-editor-cloze-region (&optional arg)
