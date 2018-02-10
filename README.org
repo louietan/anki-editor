@@ -51,15 +51,15 @@ anki-editor -- Make Anki Cards in Org-mode
 
 ** Command Cheatsheet
 
-   | Command                                       | Brief Description                                                   |
-   |-----------------------------------------------+---------------------------------------------------------------------|
-   | =anki-editor-submit=                          | Send notes in current buffer to Anki.                               |
-   | =anki-editor-insert-deck=                     | Insert a deck heading.                                              |
-   | =anki-editor-insert-note=                     | Insert the skeleton of a note.                                      |
-   | =anki-editor-add-tags=                        | Add tags to property drawer of current heading with autocompletion. |
-   | =anki-editor-cloze-region=                    | Cloze region.                                                       |
-   | =anki-editor-export-heading-contents-to-html= | Export the contents of the heading at point to HTML.                |
-   | =anki-editor-convert-region-to-html=          | Convert and replace region to HTML.                                 |
+   | Command                              | Brief Description                                                   |
+   |--------------------------------------+---------------------------------------------------------------------|
+   | =anki-editor-submit=                 | Send notes in current buffer to Anki.                               |
+   | =anki-editor-insert-deck=            | Insert a deck heading.                                              |
+   | =anki-editor-insert-note=            | Insert the skeleton of a note.                                      |
+   | =anki-editor-add-tags=               | Add tags to property drawer of current heading with autocompletion. |
+   | =anki-editor-cloze-region=           | Cloze region.                                                       |
+   | =anki-editor-export-subtree-to-html= | Export subtree of the element at point to HTML.                     |
+   | =anki-editor-convert-region-to-html= | Convert and replace region to HTML.                                 |
 
    Note that =anki-editor-submit= will fail if the deck does not exist
    yet. New decks must be created in Anki first.

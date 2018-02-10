@@ -336,22 +336,13 @@ Otherwise, it's inserted below current heading at point."
                 (princ "}}"))))))
 
 ;;;###autoload
-(defun anki-editor-export-heading-contents-to-html ()
-  "Export the contents of the heading at point to HTML."
+(defun anki-editor-export-subtree-to-html ()
+  "Export subtree of the element at point to HTML."
   (interactive)
-  (let* ((tree (org-element-at-point))
-         (contents (or (and (org-element-property :contents-begin tree)
-                            (org-element-property :contents-end tree)
-                            (buffer-substring (org-element-property :contents-begin tree)
-                                              (org-element-property :contents-end tree)))
-                       "")))
-    (if (or (null tree)
-            (not (eq (org-element-type tree) 'headline)))
-        (error "No element at point or it's not a heading")
-      (when (buffer-live-p (get-buffer anki-editor-buffer-html-output))
-        (kill-buffer anki-editor-buffer-html-output))
-      (switch-to-buffer-other-window (get-buffer-create anki-editor-buffer-html-output))
-      (insert (org-export-string-as contents anki-editor--ox-anki-html-backend t)))))
+  (org-export-to-buffer
+      anki-editor--ox-anki-html-backend
+      anki-editor-buffer-html-output nil t nil t nil
+      (lambda () (html-mode))))
 
 ;;;###autoload
 (defun anki-editor-convert-region-to-html ()
