@@ -86,6 +86,10 @@
   "If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze.
 See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 
+(defcustom anki-editor-inherit-tags
+  nil
+  "If non-nil, notes will inherit tags from all its ancestor headings.")
+
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
   "The network address AnkiConnect is listening.")
@@ -307,19 +311,14 @@ Otherwise, it's inserted below current heading at point."
   "Add tags to property drawer of current heading with autocompletion."
   (interactive)
   (let ((tags (sort (anki-editor--anki-connect-invoke-result "getTags" 5) #'string-lessp))
-        (prop (substring (symbol-name anki-editor-prop-note-tags) 1)))
+        (prop (anki-editor--keyword-name anki-editor-prop-note-tags)))
     (while t
-      (let ((existing (or (org-entry-get nil prop) "")))
-        (org-entry-put
-         nil prop
-         (concat
-          existing
-          (format " %s"
-                  (completing-read "Choose a tag: "
-                                   (cl-set-difference
-                                    tags
-                                    (split-string existing " ")
-                                    :test #'string-equal)))))))))
+      (org-entry-add-to-multivalued-property
+       (point) prop (completing-read "Choose a tag: "
+                                     (cl-set-difference
+                                      tags
+                                      (org-entry-get-multivalued-property (point) prop)
+                                      :test #'string-equal))))))
 
 ;;;###autoload
 (defun anki-editor-cloze-region (&optional arg)
@@ -399,7 +398,7 @@ If DEMOTE is t, demote the inserted note heading."
   (when demote (org-do-demote))
   (insert heading)
   (anki-editor--set-tags-fix anki-editor-note-tag)
-  (org-set-property (substring (symbol-name anki-editor-prop-note-type) 1) note-type)
+  (org-set-property (anki-editor--keyword-name anki-editor-prop-note-type) note-type)
   (dolist (field fields)
     (save-excursion
       (org-insert-heading-respect-content)
@@ -420,7 +419,7 @@ If DEMOTE is t, demote the inserted note heading."
          (err (alist-get 'error response)))
     (if result
         ;; put ID of newly created note in property drawer
-        (org-set-property (substring (symbol-name anki-editor-prop-note-id) 1)
+        (org-set-property (anki-editor--keyword-name anki-editor-prop-note-id)
                           (format "%d" (alist-get 'result response)))
       (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
 
@@ -447,26 +446,44 @@ If DEMOTE is t, demote the inserted note heading."
 
 (defun anki-editor--set-failure-reason (reason)
   "Set failure reason to REASON in property drawer at point."
-  (org-entry-put nil (substring (symbol-name anki-editor-prop-failure-reason) 1) reason))
+  (org-entry-put nil (anki-editor--keyword-name anki-editor-prop-failure-reason) reason))
 
 (defun anki-editor--clear-failure-reason ()
   "Clear failure reason in property drawer at point."
-  (org-entry-delete nil (substring (symbol-name anki-editor-prop-failure-reason) 1)))
+  (org-entry-delete nil (anki-editor--keyword-name anki-editor-prop-failure-reason)))
+
+(defun anki-editor--inherited-tags ()
+  "Get tags from ancestors."
+  (org-with-wide-buffer
+   (let (tags)
+     (while (org-up-heading-safe)
+       (setq tags (append (org-entry-get-multivalued-property
+                           (point)
+                           (anki-editor--keyword-name anki-editor-prop-note-tags))
+                          tags)))
+     tags)))
 
 (defun anki-editor--heading-to-note (heading)
   "Construct an alist representing a note for HEADING."
   (let (note-id note-type tags fields)
     (setq note-id (org-element-property anki-editor-prop-note-id heading)
           note-type (org-element-property anki-editor-prop-note-type heading)
-          tags (org-element-property anki-editor-prop-note-tags heading)
+          tags (org-entry-get-multivalued-property
+                (point)
+                (anki-editor--keyword-name anki-editor-prop-note-tags))
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
     (unless note-type (error "Missing note type"))
     (unless fields (error "Missing fields"))
 
+    (when anki-editor-inherit-tags
+      (setq tags (append tags (anki-editor--inherited-tags))))
+
+    (setq tags (delete-dups tags))
+
     `((note-id . ,(string-to-number (or note-id "-1")))
       (note-type . ,note-type)
-      (tags . ,(and tags (split-string tags " ")))
+      (tags . ,tags)
       (fields . ,fields))))
 
 (defun anki-editor--heading-to-note-field (heading)
@@ -664,6 +681,10 @@ ox-html.el :)"
           (t (format "<i>%s</i>" desc)))))
 
 ;;; Utilities
+
+(defun anki-editor--keyword-name (keyword)
+  "Get name of a keyword symbol KEYWORD without leading `:'."
+  (substring (symbol-name keyword) 1))
 
 (defun anki-editor--set-tags-fix (tags)
   "Set tags to TAGS and fix tags on the fly."
