@@ -90,6 +90,10 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
   nil
   "If non-nil, notes will inherit tags from all its ancestor headings.")
 
+(defcustom anki-editor-create-decks
+  nil
+  "If non-nil, creates deck before creating a note.")
+
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
   "The network address AnkiConnect is listening.")
@@ -413,6 +417,9 @@ If DEMOTE is t, demote the inserted note heading."
 
 (defun anki-editor--create-note (note)
   "Request AnkiConnect for creating NOTE."
+  (when anki-editor-create-decks
+    (anki-editor--create-deck (alist-get 'deck note)))
+
   (let* ((response (anki-editor--anki-connect-invoke
                     "addNote" 5 `((note . ,(anki-editor--anki-connect-map-note note)))))
          (result (alist-get 'result response))
@@ -443,6 +450,10 @@ If DEMOTE is t, demote the inserted note heading."
       (anki-editor--anki-connect-invoke-result
        "removeTags" 5 `(("notes" . (,(alist-get 'note-id note)))
                         ("tags" . ,(mapconcat #'identity removed-tags " ")))))))
+
+(defun anki-editor--create-deck (deck-name)
+  "Request AnkiConnect for creating a deck named DECK-NAME."
+  (anki-editor--anki-connect-invoke-result "createDeck" 5 `((deck . ,deck-name))))
 
 (defun anki-editor--set-failure-reason (reason)
   "Set failure reason to REASON in property drawer at point."
