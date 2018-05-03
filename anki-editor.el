@@ -575,7 +575,7 @@ ox-html.el :)"
                          (file-name-absolute-p raw-path))
                 (setq raw-path (concat (file-name-as-directory home) raw-path)))
               (message "Storing media file to Anki for %s..." raw-path)
-              (anki-editor--anki-connect-store-media-file (expand-file-name raw-path))))
+              (anki-editor--anki-connect-store-media-file (expand-file-name (url-unhex-string raw-path)))))
            (t raw-path)))
           ;; Extract attributes from parent's paragraph.  HACK: Only do
           ;; this for the first link in parent (inner image link for
