@@ -69,6 +69,11 @@ anki-editor -- Make Anki Cards in Org-mode
 
 * Change Log
 
+  *v0.2.2*
+  - Adds optional tag inheritance.
+  - Adds optional deck creation.
+  - Fixes issue #15 (url-encoded file path isn't recognized by shell commands).
+
   *v0.2.1*
   - Automatically store media files for links to file when submitting.
   - =anki-editor-insert-tags= renamed to =anki-editor-add-tags=, with behavior slightly changed.
