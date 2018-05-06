@@ -64,7 +64,6 @@
 (require 'ox)
 
 (defconst anki-editor-prop-note-type :ANKI_NOTE_TYPE)
-(defconst anki-editor-prop-note-tags :ANKI_TAGS)
 (defconst anki-editor-prop-note-id :ANKI_NOTE_ID)
 (defconst anki-editor-prop-failure-reason :ANKI_FAILURE_REASON)
 (defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
@@ -72,10 +71,6 @@
 (defgroup anki-editor nil
   "Customizations for anki-editor."
   :group 'org)
-
-(defcustom anki-editor-note-tag
-  "note"
-  "Headings with this tag will be considered as notes.")
 
 (defcustom anki-editor-deck-tag
   "deck"
@@ -85,10 +80,6 @@
   nil
   "If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze.
 See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
-
-(defcustom anki-editor-inherit-tags
-  nil
-  "If non-nil, notes will inherit tags from all its ancestor headings.")
 
 (defcustom anki-editor-create-decks
   nil
@@ -205,21 +196,22 @@ of that heading."
         current-deck)
     (org-map-entries
      (lambda ()
-       (let ((current-tags (org-get-tags)))
-         (cond
-          ((member anki-editor-deck-tag current-tags)
-           (setq current-deck (nth 4 (org-heading-components))))
-          ((member anki-editor-note-tag current-tags)
-           (progn
-             (setq total (1+ total))
-             (message "Processing note at %d..." (point))
-             (anki-editor--clear-failure-reason)
-             (condition-case err
-                 (anki-editor--process-note-heading current-deck)
-               (error (progn
-                        (setq failed (1+ failed))
-                        (anki-editor--set-failure-reason (error-message-string err))))))))))
-     (mapconcat 'identity `(,anki-editor-deck-tag ,anki-editor-note-tag) "|"))
+       (cond
+        ;; FIXME: decks won't get iterated any more, consider remove
+        ;; the `deck' tags and use properties instead ?
+        ((member anki-editor-deck-tag (org-get-tags))
+         (setq current-deck (nth 4 (org-heading-components))))
+        ((org-entry-get (point) (anki-editor--keyword-name anki-editor-prop-note-type))
+         (progn
+           (setq total (1+ total))
+           (message "Processing note at %d..." (point))
+           (anki-editor--clear-failure-reason)
+           (condition-case err
+               (anki-editor--process-note-heading current-deck)
+             (error (progn
+                      (setq failed (1+ failed))
+                      (anki-editor--set-failure-reason (error-message-string err)))))))))
+     (concat (anki-editor--keyword-name anki-editor-prop-note-type) "<>\"\""))
 
     (message (with-output-to-string
                (princ (format "Submitted %d notes, with %d failed." total failed))
@@ -248,27 +240,12 @@ With PREFIX, only insert the deck name at point."
           (anki-editor--insert-deck-heading deckname))))))
 
 ;;;###autoload
-(defun anki-editor-insert-note ()
-  "Insert the skeleton of a note.
+(defun anki-editor-insert-note (&optional prefix)
+  "Insert a note interactively.
 
-The contents to be insrted are structured with a note heading
-along with subheadings that correspond to fields.
-
-Where the note is inserted depends on where the point is.
-
-When the point is somewhere inside a note heading, the new note
-is inserted below this note with same heading level.
-
-Or when the point is outside any note heading but inside a
-heading that isn't tagged with 'deck' but under a deck heading,
-the new note is one level lower to and is inserted at the bottom
-of this heading.
-
-Or when the point is inside a deck heading, the behavior is the
-same as above.
-
-Otherwise, it's inserted below current heading at point."
-  (interactive)
+Where the note subtree is placed depends on PREFIX, which is the
+same as how it is used by `M-RET'(org-insert-heading)."
+  (interactive "P")
   (message "Fetching note types...")
   (let ((note-types (sort (anki-editor--anki-connect-invoke-result "modelNames" 5) #'string-lessp))
         note-type note-heading fields)
@@ -276,53 +253,7 @@ Otherwise, it's inserted below current heading at point."
     (message "Fetching note fields...")
     (setq fields (anki-editor--anki-connect-invoke-result "modelFieldNames" 5 `((modelName . ,note-type)))
           note-heading (read-from-minibuffer "Enter the heading: " "Item"))
-
-    ;; find and go to the best position, then insert the note
-    (let ((cur-point (point))
-          pt-of-grp
-          inserted)
-      (anki-editor--visit-ancestor-headings
-       (lambda ()
-         (let ((tags (org-get-tags)))
-           (cond
-            ;; if runs into a note heading, inserts the note heading with
-            ;; the same level
-            ((member anki-editor-note-tag tags)
-             (progn
-               (anki-editor--insert-note-skeleton note-heading note-type fields)
-               (setq inserted t)
-               t))
-            ;; if runs into a deck heading, inserts the note heading one
-            ;; level lower to current deck heading or to the group
-            ;; heading that was visited before
-            ((member anki-editor-deck-tag tags)
-             (progn
-               (when pt-of-grp (goto-char pt-of-grp))
-               (anki-editor--insert-note-skeleton note-heading note-type fields t)
-               (setq inserted t)
-               t))
-            ;; otherwise, consider it as a group heading and save its
-            ;; point for further consideration, then continue
-            (t (progn
-                 (unless pt-of-grp (setq pt-of-grp (point)))
-                 nil))))))
-      (unless inserted
-        (goto-char cur-point)
-        (anki-editor--insert-note-skeleton note-heading note-type fields)))))
-
-;;;###autoload
-(defun anki-editor-add-tags ()
-  "Add tags to property drawer of current heading with autocompletion."
-  (interactive)
-  (let ((tags (sort (anki-editor--anki-connect-invoke-result "getTags" 5) #'string-lessp))
-        (prop (anki-editor--keyword-name anki-editor-prop-note-tags)))
-    (while t
-      (org-entry-add-to-multivalued-property
-       (point) prop (completing-read "Choose a tag: "
-                                     (cl-set-difference
-                                      tags
-                                      (org-entry-get-multivalued-property (point) prop)
-                                      :test #'string-equal))))))
+    (anki-editor--insert-note-skeleton prefix note-heading note-type fields)))
 
 ;;;###autoload
 (defun anki-editor-cloze-region (&optional arg)
@@ -395,13 +326,11 @@ DECK is used when the action is note creation."
     (push `(deck . ,deck) note)
     (anki-editor--save-note note)))
 
-(defun anki-editor--insert-note-skeleton (heading note-type fields &optional demote)
-  "Insert a note skeleton with HEADING, NOTE-TYPE and FIELDS.
-If DEMOTE is t, demote the inserted note heading."
-  (org-insert-heading-respect-content)
-  (when demote (org-do-demote))
+(defun anki-editor--insert-note-skeleton (prefix heading note-type fields)
+  "Insert a note subtree (skeleton) with HEADING, NOTE-TYPE and FIELDS.
+Where the subtree is created depends on PREFIX."
+  (org-insert-heading prefix)
   (insert heading)
-  (anki-editor--set-tags-fix anki-editor-note-tag)
   (org-set-property (anki-editor--keyword-name anki-editor-prop-note-type) note-type)
   (dolist (field fields)
     (save-excursion
@@ -463,34 +392,46 @@ If DEMOTE is t, demote the inserted note heading."
   "Clear failure reason in property drawer at point."
   (org-entry-delete nil (anki-editor--keyword-name anki-editor-prop-failure-reason)))
 
-(defun anki-editor--inherited-tags ()
-  "Get tags from ancestors."
-  (org-with-wide-buffer
-   (let (tags)
-     (while (org-up-heading-safe)
-       (setq tags (append (org-entry-get-multivalued-property
-                           (point)
-                           (anki-editor--keyword-name anki-editor-prop-note-tags))
-                          tags)))
-     tags)))
+(defun anki-editor-all-tags ()
+  "Get all tags from Anki."
+  (anki-editor--anki-connect-invoke-result "getTags" 5))
+
+(defun anki-editor--before-set-tags (&optional _ just-align)
+  "Build tag list for completion including tags from Anki.
+
+When the value of `org-current-tag-alist' is non-nil, just append
+to it.
+
+Otherwise, advise function `org-get-buffer-tags' to append tags
+from Anki to the result.
+
+Do nothing when JUST-ALIGN is non-nil."
+  (unless just-align
+    (if org-current-tag-alist
+        (setq org-current-tag-alist
+              (org-tag-add-to-alist
+               (mapcar #'list (anki-editor-all-tags))
+               org-current-tag-alist))
+      (unless (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags)
+        (advice-add 'org-get-buffer-tags :around #'anki-editor--get-buffer-tags)))))
+
+(defun anki-editor--get-buffer-tags (oldfun)
+  "Append tags from Anki to the result of applying OLDFUN."
+  (append (funcall oldfun) (mapcar #'list (anki-editor-all-tags))))
+
+;; TODO: consider turn this package into a minor mode to enable it to stop advising ?
+(advice-add 'org-set-tags :before #'anki-editor--before-set-tags)
 
 (defun anki-editor--heading-to-note (heading)
   "Construct an alist representing a note for HEADING."
   (let (note-id note-type tags fields)
     (setq note-id (org-element-property anki-editor-prop-note-id heading)
           note-type (org-element-property anki-editor-prop-note-type heading)
-          tags (org-entry-get-multivalued-property
-                (point)
-                (anki-editor--keyword-name anki-editor-prop-note-tags))
+          tags (org-get-tags-at)
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
     (unless note-type (error "Missing note type"))
     (unless fields (error "Missing fields"))
-
-    (when anki-editor-inherit-tags
-      (setq tags (append tags (anki-editor--inherited-tags))))
-
-    (setq tags (delete-dups tags))
 
     `((note-id . ,(string-to-number (or note-id "-1")))
       (note-type . ,note-type)

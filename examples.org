@@ -2,10 +2,9 @@
 
 ** Vocabulary
 
-*** Item                                                               :note:
+*** Item                                                       :vocab:idioms:
     :PROPERTIES:
     :ANKI_NOTE_TYPE: Basic (and reversed card)
-    :ANKI_TAGS: vocab idioms
     :END:
 
 **** Front
@@ -18,10 +17,9 @@
 
 * Computing                                                            :deck:
 
-** Item                                                                :note:
+** Item                                              :lisp:emacs:programming:
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Basic
-   :ANKI_TAGS: lisp emacs programming
    :END:
 
 *** Front
@@ -51,7 +49,7 @@
 
 * Mathematics                                                          :deck:
 
-** Item1                                                               :note:
+** Item1
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Cloze
    :END:
@@ -62,7 +60,7 @@
 
 *** Extra
 
-** Item2                                                               :note:
+** Item2
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Basic
    :END:
