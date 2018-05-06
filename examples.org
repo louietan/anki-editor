@@ -1,4 +1,7 @@
-* English                                                              :deck:
+* English
+  :PROPERTIES:
+  :ANKI_DECK: English
+  :END:
 
 ** Vocabulary
 
@@ -15,7 +18,10 @@
 
      it's raining very hard
 
-* Computing                                                            :deck:
+* Computing
+  :PROPERTIES:
+  :ANKI_DECK: Computing
+  :END:
 
 ** Item                                              :lisp:emacs:programming:
    :PROPERTIES:
@@ -47,7 +53,10 @@
     </div>
     #+END_EXPORT
 
-* Mathematics                                                          :deck:
+* Mathematics
+  :PROPERTIES:
+  :ANKI_DECK: Mathematics
+  :END:
 
 ** Item1
    :PROPERTIES:

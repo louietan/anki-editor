@@ -64,19 +64,16 @@
 (require 'ox)
 (require 'seq)
 
-(defconst anki-editor-prop-note-type :ANKI_NOTE_TYPE)
-(defconst anki-editor-prop-note-id :ANKI_NOTE_ID)
-(defconst anki-editor-prop-failure-reason :ANKI_FAILURE_REASON)
+(defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
+(defconst anki-editor-prop-note-id "ANKI_NOTE_ID")
+(defconst anki-editor-prop-deck "ANKI_DECK")
+(defconst anki-editor-prop-failure-reason "ANKI_FAILURE_REASON")
 (defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
 (defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
 
 (defgroup anki-editor nil
   "Customizations for anki-editor."
   :group 'org)
-
-(defcustom anki-editor-deck-tag
-  "deck"
-  "Headings with this tag will be considered as decks.")
 
 (defcustom anki-editor-break-consecutive-braces-in-latex
   nil
@@ -194,26 +191,18 @@ If one fails, the failure reason will be set in property drawer
 of that heading."
   (interactive)
   (let ((total 0)
-        (failed 0)
-        current-deck)
+        (failed 0))
     (org-map-entries
      (lambda ()
-       (cond
-        ;; FIXME: decks won't get iterated any more, consider remove
-        ;; the `deck' tags and use properties instead ?
-        ((member anki-editor-deck-tag (org-get-tags))
-         (setq current-deck (nth 4 (org-heading-components))))
-        ((org-entry-get (point) (anki-editor--keyword-name anki-editor-prop-note-type))
-         (progn
-           (setq total (1+ total))
-           (message "Processing note at %d..." (point))
-           (anki-editor--clear-failure-reason)
-           (condition-case err
-               (anki-editor--process-note-heading current-deck)
-             (error (progn
-                      (setq failed (1+ failed))
-                      (anki-editor--set-failure-reason (error-message-string err)))))))))
-     (concat (anki-editor--keyword-name anki-editor-prop-note-type) "<>\"\""))
+       (setq total (1+ total))
+       (message "Processing note at %d..." (point))
+       (anki-editor--clear-failure-reason)
+       (condition-case err
+           (anki-editor--process-note-heading)
+         (error (progn
+                  (setq failed (1+ failed))
+                  (anki-editor--set-failure-reason (error-message-string err))))))
+     (concat anki-editor-prop-note-type "<>\"\""))
 
     (message (with-output-to-string
                (princ (format "Submitted %d notes, with %d failed." total failed))
@@ -221,25 +210,16 @@ of that heading."
                  (princ " Check property drawers for failure reasons."))))))
 
 ;;;###autoload
-(defun anki-editor-insert-deck (&optional prefix)
-  "Insert a deck heading.
-With PREFIX, only insert the deck name at point."
+(defun anki-editor-insert-deck (&optional arg)
+  "Insert a deck heading interactively.
+ARG is used the same way as `M-RET' (org-insert-heading)."
   (interactive "P")
   (message "Fetching decks...")
-  (let ((decks (sort (anki-editor--anki-connect-invoke-result "deckNames" 5) #'string-lessp))
-        deckname)
-    (setq deckname (completing-read "Choose a deck: " decks))
-    (if prefix
-        (insert deckname)
-      (let (inserted)
-        (anki-editor--visit-ancestor-headings
-         (lambda ()
-           (when (member anki-editor-deck-tag (org-get-tags))
-             (anki-editor--insert-deck-heading deckname)
-             (setq inserted t))))
-
-        (unless inserted
-          (anki-editor--insert-deck-heading deckname))))))
+  (let* ((decks (sort (anki-editor-deck-names) #'string-lessp))
+         (deckname (completing-read "Choose a deck: " decks)))
+    (org-insert-heading arg)
+    (insert deckname)
+    (org-set-property anki-editor-prop-deck deckname)))
 
 ;;;###autoload
 (defun anki-editor-insert-note (&optional prefix)
@@ -249,7 +229,7 @@ Where the note subtree is placed depends on PREFIX, which is the
 same as how it is used by `M-RET'(org-insert-heading)."
   (interactive "P")
   (message "Fetching note types...")
-  (let ((note-types (sort (anki-editor--anki-connect-invoke-result "modelNames" 5) #'string-lessp))
+  (let ((note-types (sort (anki-editor-note-types) #'string-lessp))
         note-type note-heading fields)
     (setq note-type (completing-read "Choose a note type: " note-types))
     (message "Fetching note fields...")
@@ -304,17 +284,8 @@ bugfixes or new features of AnkiConnect."
 
 ;;; Core Functions
 
-(defun anki-editor--insert-deck-heading (deckname)
-  "Insert a deck heading with DECKNAME."
-  (org-insert-heading-respect-content)
-  (insert deckname)
-  (anki-editor--set-tags-fix anki-editor-deck-tag))
-
-(defun anki-editor--process-note-heading (deck)
-  "Process note heading at point.
-DECK is used when the action is note creation."
-  (unless deck (error "No deck specified"))
-
+(defun anki-editor--process-note-heading ()
+  "Process note heading at point."
   (let (note-elem note)
     (setq note-elem (org-element-at-point)
           note-elem (let ((content (buffer-substring
@@ -325,7 +296,6 @@ DECK is used when the action is note creation."
                         (insert content)
                         (car (org-element-contents (org-element-parse-buffer)))))
           note (anki-editor--heading-to-note note-elem))
-    (push `(deck . ,deck) note)
     (anki-editor--save-note note)))
 
 (defun anki-editor--insert-note-skeleton (prefix heading note-type fields)
@@ -333,7 +303,7 @@ DECK is used when the action is note creation."
 Where the subtree is created depends on PREFIX."
   (org-insert-heading prefix)
   (insert heading)
-  (org-set-property (anki-editor--keyword-name anki-editor-prop-note-type) note-type)
+  (org-set-property anki-editor-prop-note-type note-type)
   (dolist (field fields)
     (save-excursion
       (org-insert-heading-respect-content)
@@ -357,7 +327,7 @@ Where the subtree is created depends on PREFIX."
          (err (alist-get 'error response)))
     (if result
         ;; put ID of newly created note in property drawer
-        (org-set-property (anki-editor--keyword-name anki-editor-prop-note-id)
+        (org-set-property anki-editor-prop-note-id
                           (format "%d" (alist-get 'result response)))
       (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
 
@@ -382,17 +352,26 @@ Where the subtree is created depends on PREFIX."
        "removeTags" 5 `(("notes" . (,(alist-get 'note-id note)))
                         ("tags" . ,(mapconcat #'identity removed-tags " ")))))))
 
+(defun anki-editor--get-allowed-values-for-property (property)
+  "Get allowed values for PROPERTY."
+  (pcase property
+    ((pred (string= anki-editor-prop-deck)) (anki-editor-deck-names))
+    ((pred (string= anki-editor-prop-note-type)) (anki-editor-note-types))
+    (_ nil)))
+
+(add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property)
+
 (defun anki-editor--create-deck (deck-name)
   "Request AnkiConnect for creating a deck named DECK-NAME."
   (anki-editor--anki-connect-invoke-result "createDeck" 5 `((deck . ,deck-name))))
 
 (defun anki-editor--set-failure-reason (reason)
   "Set failure reason to REASON in property drawer at point."
-  (org-entry-put nil (anki-editor--keyword-name anki-editor-prop-failure-reason) reason))
+  (org-entry-put nil anki-editor-prop-failure-reason reason))
 
 (defun anki-editor--clear-failure-reason ()
   "Clear failure reason in property drawer at point."
-  (org-entry-delete nil (anki-editor--keyword-name anki-editor-prop-failure-reason)))
+  (org-entry-delete nil anki-editor-prop-failure-reason))
 
 (defun anki-editor-is-valid-org-tag (tag)
   "Check if string TAG can be used as an Org tag."
@@ -405,6 +384,10 @@ Where the subtree is created depends on PREFIX."
         (setq anki-tags (anki-editor--anki-connect-invoke-result "getTags" 5))
       (unless (seq-every-p #'anki-editor-is-valid-org-tag anki-tags)
         (warn "Some tags from Anki contain characters that are not valid in Org tags.")))))
+
+(defun anki-editor-deck-names ()
+  "Get all decks names from Anki."
+  (anki-editor--anki-connect-invoke-result "deckNames" 5))
 
 (defun anki-editor--before-set-tags (&optional _ just-align)
   "Build tag list for completion including tags from Anki.
@@ -432,18 +415,25 @@ Do nothing when JUST-ALIGN is non-nil."
 ;; TODO: consider turn this package into a minor mode to enable it to stop advising ?
 (advice-add 'org-set-tags :before #'anki-editor--before-set-tags)
 
+(defun anki-editor-note-types ()
+  "Get note types from Anki."
+  (anki-editor--anki-connect-invoke-result "modelNames" 5))
+
 (defun anki-editor--heading-to-note (heading)
   "Construct an alist representing a note for HEADING."
-  (let (note-id note-type tags fields)
-    (setq note-id (org-element-property anki-editor-prop-note-id heading)
-          note-type (org-element-property anki-editor-prop-note-type heading)
+  (let (deck note-id note-type tags fields)
+    (setq deck (org-entry-get-with-inheritance anki-editor-prop-deck)
+          note-id (org-entry-get nil anki-editor-prop-note-id)
+          note-type (org-entry-get nil anki-editor-prop-note-type)
           tags (org-get-tags-at)
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
+    (unless deck (error "No deck specified"))
     (unless note-type (error "Missing note type"))
     (unless fields (error "Missing fields"))
 
-    `((note-id . ,(string-to-number (or note-id "-1")))
+    `((deck . ,deck)
+      (note-id . ,(string-to-number (or note-id "-1")))
       (note-type . ,note-type)
       (tags . ,tags)
       (fields . ,fields))))
@@ -644,33 +634,10 @@ ox-html.el :)"
 
 ;;; Utilities
 
-(defun anki-editor--keyword-name (keyword)
-  "Get name of a keyword symbol KEYWORD without leading `:'."
-  (substring (symbol-name keyword) 1))
-
-(defun anki-editor--set-tags-fix (tags)
-  "Set tags to TAGS and fix tags on the fly."
-  (org-set-tags-to tags)
-  (org-fix-tags-on-the-fly))
-
 (defun anki-editor--get-subheadings (heading)
   "Get all the subheadings of HEADING."
   (org-element-map (org-element-contents heading)
       'headline 'identity nil nil 'headline))
-
-(defun anki-editor--visit-ancestor-headings (visitor &optional level)
-  "Move point to and call VISITOR at each ancestor heading from point.
-Don't pass LEVEL, it's only used in recursion.
-Stops when VISITOR returns t or point reaches the beginning of buffer."
-  (let (stop)
-    (when (org-at-heading-p)
-      (let ((cur-level (car (org-heading-components))))
-        (when (or (null level) (< cur-level level))
-          (setq level cur-level
-                stop (funcall visitor)))))
-    (when (and (not stop) (/= (point) (point-min)))
-      (org-previous-visible-heading 1)
-      (anki-editor--visit-ancestor-headings visitor level))))
 
 
 (provide 'anki-editor)
