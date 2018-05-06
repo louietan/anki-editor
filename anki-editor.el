@@ -62,11 +62,13 @@
 (require 'json)
 (require 'org-element)
 (require 'ox)
+(require 'seq)
 
 (defconst anki-editor-prop-note-type :ANKI_NOTE_TYPE)
 (defconst anki-editor-prop-note-id :ANKI_NOTE_ID)
 (defconst anki-editor-prop-failure-reason :ANKI_FAILURE_REASON)
 (defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
+(defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
 
 (defgroup anki-editor nil
   "Customizations for anki-editor."
@@ -392,9 +394,17 @@ Where the subtree is created depends on PREFIX."
   "Clear failure reason in property drawer at point."
   (org-entry-delete nil (anki-editor--keyword-name anki-editor-prop-failure-reason)))
 
+(defun anki-editor-is-valid-org-tag (tag)
+  "Check if string TAG can be used as an Org tag."
+  (string-match-p anki-editor-org-tag-regexp tag))
+
 (defun anki-editor-all-tags ()
   "Get all tags from Anki."
-  (anki-editor--anki-connect-invoke-result "getTags" 5))
+  (let (anki-tags)
+    (prog1
+        (setq anki-tags (anki-editor--anki-connect-invoke-result "getTags" 5))
+      (unless (seq-every-p #'anki-editor-is-valid-org-tag anki-tags)
+        (warn "Some tags from Anki contain characters that are not valid in Org tags.")))))
 
 (defun anki-editor--before-set-tags (&optional _ just-align)
   "Build tag list for completion including tags from Anki.
