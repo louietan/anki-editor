@@ -177,9 +177,29 @@ The result is the path to the newly stored media file."
        (data . ,content)))
     media-file-name))
 
-;;; Commands
+;;; Minor mode
 
 ;;;###autoload
+(define-minor-mode anki-editor-mode
+  "anki-eidtor-mode"
+  :lighter " anki-editor"
+  (if anki-editor-mode (anki-editor-setup-minor-mode)
+    (anki-editor-teardown-minor-mode)))
+
+(defun anki-editor-setup-minor-mode ()
+  "Set up this minor mode."
+  (add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property)
+  (advice-add 'org-set-tags :before #'anki-editor--before-set-tags))
+
+(defun anki-editor-teardown-minor-mode ()
+  "Tear down this minor mode."
+  (remove-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property)
+  (advice-remove 'org-set-tags #'anki-editor--before-set-tags)
+  (when (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags)
+    (advice-remove 'org-get-buffer-tags #'anki-editor--get-buffer-tags)))
+
+;;; Commands
+
 (defun anki-editor-submit ()
   "Send notes in current buffer to Anki.
 
@@ -209,7 +229,6 @@ of that heading."
                (when (> failed 0)
                  (princ " Check property drawers for failure reasons."))))))
 
-;;;###autoload
 (defun anki-editor-insert-deck (&optional arg)
   "Insert a deck heading interactively.
 ARG is used the same way as `M-RET' (org-insert-heading)."
@@ -221,7 +240,6 @@ ARG is used the same way as `M-RET' (org-insert-heading)."
     (insert deckname)
     (org-set-property anki-editor-prop-deck deckname)))
 
-;;;###autoload
 (defun anki-editor-insert-note (&optional prefix)
   "Insert a note interactively.
 
@@ -237,7 +255,6 @@ same as how it is used by `M-RET'(org-insert-heading)."
           note-heading (read-from-minibuffer "Enter the heading: " "Item"))
     (anki-editor--insert-note-skeleton prefix note-heading note-type fields)))
 
-;;;###autoload
 (defun anki-editor-cloze-region (&optional arg)
   "Cloze region with number ARG."
   (interactive "p")
@@ -251,7 +268,6 @@ same as how it is used by `M-RET'(org-insert-heading)."
                 (unless (string-empty-p (string-trim hint)) (princ (format "::%s" hint)))
                 (princ "}}"))))))
 
-;;;###autoload
 (defun anki-editor-export-subtree-to-html ()
   "Export subtree of the element at point to HTML."
   (interactive)
@@ -260,13 +276,11 @@ same as how it is used by `M-RET'(org-insert-heading)."
       anki-editor-buffer-html-output nil t nil t nil
       (lambda () (html-mode))))
 
-;;;###autoload
 (defun anki-editor-convert-region-to-html ()
   "Convert and replace region to HTML."
   (interactive)
   (org-export-replace-region-by anki-editor--ox-anki-html-backend))
 
-;;;###autoload
 (defun anki-editor-anki-connect-upgrade ()
   "Upgrade AnkiConnect to the latest version.
 
@@ -359,7 +373,6 @@ Where the subtree is created depends on PREFIX."
     ((pred (string= anki-editor-prop-note-type)) (anki-editor-note-types))
     (_ nil)))
 
-(add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property)
 
 (defun anki-editor--create-deck (deck-name)
   "Request AnkiConnect for creating a deck named DECK-NAME."
@@ -411,9 +424,6 @@ Do nothing when JUST-ALIGN is non-nil."
 (defun anki-editor--get-buffer-tags (oldfun)
   "Append tags from Anki to the result of applying OLDFUN."
   (append (funcall oldfun) (mapcar #'list (anki-editor-all-tags))))
-
-;; TODO: consider turn this package into a minor mode to enable it to stop advising ?
-(advice-add 'org-set-tags :before #'anki-editor--before-set-tags)
 
 (defun anki-editor-note-types ()
   "Get note types from Anki."
