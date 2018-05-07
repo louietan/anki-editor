@@ -488,7 +488,8 @@ Do nothing when JUST-ALIGN is non-nil."
 
 (defun anki-editor--heading-to-note-field (heading)
   "Convert HEADING to field data, a cons cell, the car of which is the field name, the cdr of which is contens represented in HTML."
-  (let ((field-name (substring-no-properties
+  (let ((inhibit-message t)  ;; suppress echo message from `org-babel-exp-src-block'
+        (field-name (substring-no-properties
                      (org-element-property
                       :raw-value
                       heading)))
