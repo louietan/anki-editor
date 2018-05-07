@@ -59,6 +59,7 @@
 ;;
 ;;; Code:
 
+(require 'cl-lib)
 (require 'json)
 (require 'org-element)
 (require 'ox)
@@ -200,34 +201,67 @@ The result is the path to the newly stored media file."
 
 ;;; Commands
 
-(defun anki-editor-submit ()
-  "Send notes in current buffer to Anki.
+(defun anki-editor-submit (&optional arg match scope)
+  "Build notes from headings that can be matched by MATCH within SCOPE and send them to Anki.
 
-For each note heading, if there's no note id in property drawer,
-create a note, otherwise, update fields and tags of the existing
-note.
+The default search condition `&ANKI_NOTE_TYPE<>\"\"' will be
+appended to MATCH.
+
+For notes that already exist in Anki (i.e. has `ANKI_NOTE_ID'
+property), only their fields and tags will be updated, change of
+deck or note type are currently not supported.
+
+If SCOPE is not specified, the following rules are applied to
+determine the scope:
+
+- if there's an active region, it will be set to `region'
+- if called with prefix `C-u', it will be set to `tree'
+- if called with prefix double `C-u', it will be set to `file'
+- if called with prefix triple `C-u', will be set to `agenda'
+
+See doc string of `org-map-entries' for what these different options mean.
 
 If one fails, the failure reason will be set in property drawer
 of that heading."
-  (interactive)
-  (let ((total 0)
-        (failed 0))
-    (org-map-entries
-     (lambda ()
-       (setq total (1+ total))
-       (message "Processing note at %d..." (point))
-       (anki-editor--clear-failure-reason)
-       (condition-case err
-           (anki-editor--process-note-heading)
-         (error (progn
-                  (setq failed (1+ failed))
-                  (anki-editor--set-failure-reason (error-message-string err))))))
-     (concat anki-editor-prop-note-type "<>\"\""))
+  (interactive "P")
 
-    (message (with-output-to-string
-               (princ (format "Submitted %d notes, with %d failed." total failed))
-               (when (> failed 0)
-                 (princ " Check property drawers for failure reasons."))))))
+  (unless scope
+    (setq scope (cond
+                 ((region-active-p) 'region)
+                 ((equal arg '(4)) 'tree)
+                 ((equal arg '(16)) 'file)
+                 ((equal arg '(64)) 'agenda)
+                 (t nil))))
+  (setq match (concat match "&" anki-editor-prop-note-type "<>\"\""))
+
+  (let ((total 0)
+        (acc 0)
+        (failed 0))
+    (message "Counting notes...")
+    (org-map-entries (lambda () (incf total)) match scope)
+    (org-map-entries (lambda ()
+                       (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
+                                (incf acc) total (buffer-name))
+                       (anki-editor--clear-failure-reason)
+                       (condition-case err
+                           (anki-editor--process-note-heading)
+                         (error (incf failed)
+                                (anki-editor--set-failure-reason (error-message-string err)))))
+                     match
+                     scope)
+
+    (message (if (= 0 failed)
+                 (format "Successfully submitted %d notes to Anki." acc)
+               (format "Submitted %d notes, %d of which are failed. Check property drawers for failure reasons. Once you've fixed the issues, you could use `anki-editor-retry-failure-notes' to re-submit the failed notes."
+                       acc
+                       failed)))))
+
+(defun anki-editor-retry-failure-notes (&optional arg scope)
+  "Re-submit notes that were failed.
+This command just calls `anki-editor-submit' with match string
+matching non-empty `ANKI_FAILURE_REASON' properties."
+  (interactive "P")
+  (anki-editor-submit arg (concat anki-editor-prop-failure-reason "<>\"\"") scope))
 
 (defun anki-editor-insert-deck (&optional arg)
   "Insert a deck heading interactively.
@@ -304,7 +338,10 @@ bugfixes or new features of AnkiConnect."
     (setq note-elem (org-element-at-point)
           note-elem (let ((content (buffer-substring
                                     (org-element-property :begin note-elem)
-                                    (org-element-property :end note-elem))))
+                                    ;; in case the buffer is narrowed,
+                                    ;; e.g. by `org-map-entries' when
+                                    ;; scope is `tree'
+                                    (min (point-max) (org-element-property :end note-elem)))))
                       (with-temp-buffer
                         (org-mode)
                         (insert content)
@@ -435,6 +472,7 @@ Do nothing when JUST-ALIGN is non-nil."
     (setq deck (org-entry-get-with-inheritance anki-editor-prop-deck)
           note-id (org-entry-get nil anki-editor-prop-note-id)
           note-type (org-entry-get nil anki-editor-prop-note-type)
+          ;; TODO: use `org-scanner-tags' instead, which is said to be faster
           tags (org-get-tags-at)
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
