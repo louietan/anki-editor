@@ -6,7 +6,7 @@
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Louie Tan
 ;; Version: 0.2.1
-;; Package-Requires: ((emacs "25"))
+;; Package-Requires: ((emacs "25") (request "0.3.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -63,6 +63,7 @@
 (require 'json)
 (require 'org-element)
 (require 'ox)
+(require 'request)
 (require 'seq)
 
 (defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
@@ -104,29 +105,23 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
                         (if params
                             (push `("params" . ,params) data)
                           data)))
-         (request-tempfile (make-temp-file "emacs-anki-editor")))
+         (request-backend 'curl)
+         (json-array-type 'list)
+         reply err)
 
-    (with-temp-file request-tempfile
-      (setq buffer-file-coding-system 'utf-8)
-      (set-buffer-multibyte t)
-      (insert request-body))
-
-    (let* ((raw-resp (shell-command-to-string
-                      (format "curl %s:%s --silent -X POST --data-binary @%s"
-                              (shell-quote-argument anki-editor-anki-connect-listening-address)
-                              (shell-quote-argument anki-editor-anki-connect-listening-port)
-                              (shell-quote-argument request-tempfile))))
-           resp error)
-      (condition-case err
-          (let ((json-array-type 'list))
-            (setq resp (json-read-from-string raw-resp)
-                  error (alist-get 'error resp)))
-        (error (setq error
-                     (format "Unexpected error communicating with AnkiConnect: %s, the response was %s"
-                             (error-message-string err)
-                             (prin1-to-string raw-resp)))))
-      `((result . ,(alist-get 'result resp))
-        (error . ,error)))))
+    (request (format "http://%s:%s"
+                     anki-editor-anki-connect-listening-address
+                     anki-editor-anki-connect-listening-port)
+             :type "POST"
+             :parser 'json-read
+             :data (encode-coding-string request-body 'utf-8)
+             :success (cl-function (lambda (&key data &allow-other-keys)
+                                     (setq reply data)))
+             :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
+                                   (setq err (string-trim (cdr error-thrown)))))
+             :sync t)
+    (when err (error "Error communicating with AnkiConnect using cURL: %s" err))
+    (or reply (error "Got empty reply from AnkiConnect"))))
 
 (defmacro anki-editor--anki-connect-invoke-result (&rest args)
   "Invoke AnkiConnect with ARGS, return the result from response or raise an error."
@@ -148,16 +143,10 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
           ;; to be type of list.
           (cons "tags" (vconcat .tags)))))
 
-(defun anki-editor--anki-connect-heading-to-note (heading)
-  "Convert HEADING to a note in the form that AnkiConnect accepts."
-  (anki-editor--anki-connect-map-note
-   (anki-editor--heading-to-note heading)))
-
 (defun anki-editor--anki-connect-store-media-file (path)
   "Store media file for PATH, which is an absolute file name.
 The result is the path to the newly stored media file."
-  (unless (and (executable-find "base64")
-               (executable-find "sha1sum"))
+  (unless (every #'executable-find '("base64" "sha1sum"))
     (error "Please make sure `base64' and `sha1sum' are available from your shell, which are required for storing media files"))
 
   (let* ((content (string-trim
@@ -238,14 +227,14 @@ of that heading."
         (acc 0)
         (failed 0))
     (message "Counting notes...")
-    (org-map-entries (lambda () (incf total)) match scope)
+    (org-map-entries (lambda () (cl-incf total)) match scope)
     (org-map-entries (lambda ()
                        (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
-                                (incf acc) total (buffer-name))
+                                (cl-incf acc) total (buffer-name))
                        (anki-editor--clear-failure-reason)
                        (condition-case err
                            (anki-editor--process-note-heading)
-                         (error (incf failed)
+                         (error (cl-incf failed)
                                 (anki-editor--set-failure-reason (error-message-string err)))))
                      match
                      scope)
@@ -468,11 +457,11 @@ Do nothing when JUST-ALIGN is non-nil."
 
 (defun anki-editor--heading-to-note (heading)
   "Construct an alist representing a note for HEADING."
-  (let (deck note-id note-type tags fields)
+  (let ((org-trust-scanner-tags t)
+        deck note-id note-type tags fields)
     (setq deck (org-entry-get-with-inheritance anki-editor-prop-deck)
           note-id (org-entry-get nil anki-editor-prop-note-id)
           note-type (org-entry-get nil anki-editor-prop-note-type)
-          ;; TODO: use `org-scanner-tags' instead, which is said to be faster
           tags (org-get-tags-at)
           fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
 
