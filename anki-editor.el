@@ -1,4 +1,4 @@
-;;; anki-editor.el --- Make Anki Cards in Org-mode
+;;; anki-editor.el --- Make Anki Cards in Org-mode  -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2018 Louie Tan <louietanlei@gmail.com>
 ;;
@@ -6,7 +6,7 @@
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Louie Tan
 ;; Version: 0.2.1
-;; Package-Requires: ((emacs "25") (request "0.3.0"))
+;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.12.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -60,11 +60,11 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'dash)
 (require 'json)
 (require 'org-element)
 (require 'ox)
 (require 'request)
-(require 'seq)
 
 (defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
 (defconst anki-editor-prop-note-id "ANKI_NOTE_ID")
@@ -97,17 +97,35 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 
 ;;; AnkiConnect
 
-(defun anki-editor--anki-connect-invoke (action version &optional params)
+(defun anki-editor--anki-connect-invoke-multi (&rest actions)
+  (-zip-with (lambda (result handler) (and handler (funcall handler result)))
+             (anki-editor--anki-connect-invoke-result
+              "multi" `((actions . ,(mapcar #'car actions))))
+             (mapcar #'cdr actions)))
+
+(defun anki-editor--anki-connect-action (action &optional params version)
+  (let (a)
+    (when version
+      (push `(version . ,version) a))
+    (when params
+      (push `(params . ,params) a))
+    (push `(action . ,action) a)))
+
+(defun anki-editor--anki-connect-invoke-queue ()
+  (let (action-queue)
+    (lambda (&optional action params handler)
+      (if action
+          (push (cons (anki-editor--anki-connect-action action params) handler) action-queue)
+        (when action-queue
+          (apply #'anki-editor--anki-connect-invoke-multi (nreverse action-queue))
+          (setq action-queue nil))))))
+
+(defun anki-editor--anki-connect-invoke (action &optional params)
   "Invoke AnkiConnect with ACTION, VERSION and PARAMS."
-  (let* ((data `(("action" . ,action)
-                 ("version" . ,version)))
-         (request-body (json-encode
-                        (if params
-                            (push `("params" . ,params) data)
-                          data)))
-         (request-backend 'curl)
-         (json-array-type 'list)
-         reply err)
+  (let ((request-body (json-encode (anki-editor--anki-connect-action action params 5)))
+        (request-backend 'curl)
+        (json-array-type 'list)
+        reply err)
 
     (request (format "http://%s:%s"
                      anki-editor-anki-connect-listening-address
@@ -125,11 +143,9 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 
 (defmacro anki-editor--anki-connect-invoke-result (&rest args)
   "Invoke AnkiConnect with ARGS, return the result from response or raise an error."
-  `(let* ((resp (anki-editor--anki-connect-invoke ,@args))
-          (rslt (alist-get 'result resp))
-          (err (alist-get 'error resp)))
-     (when err (error err))
-     rslt))
+  `(let-alist (anki-editor--anki-connect-invoke ,@args)
+     (when .error (error .error))
+     .result))
 
 (defun anki-editor--anki-connect-map-note (note)
   "Convert NOTE to the form that AnkiConnect accepts."
@@ -146,7 +162,7 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 (defun anki-editor--anki-connect-store-media-file (path)
   "Store media file for PATH, which is an absolute file name.
 The result is the path to the newly stored media file."
-  (unless (every #'executable-find '("base64" "sha1sum"))
+  (unless (-all? #'executable-find '("base64" "sha1sum"))
     (error "Please make sure `base64' and `sha1sum' are available from your shell, which are required for storing media files"))
 
   (let* ((content (string-trim
@@ -162,10 +178,11 @@ The result is the path to the newly stored media file."
                                   hash
                                   (file-name-extension path t))))
     (anki-editor--anki-connect-invoke-result
-     "storeMediaFile" 5
+     "storeMediaFile"
      `((filename . ,media-file-name)
        (data . ,content)))
     media-file-name))
+
 
 ;;; Minor mode
 
@@ -188,13 +205,14 @@ The result is the path to the newly stored media file."
   (when (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags)
     (advice-remove 'org-get-buffer-tags #'anki-editor--get-buffer-tags)))
 
+
 ;;; Commands
 
-(defun anki-editor-submit (&optional arg match scope)
-  "Build notes from headings that can be matched by MATCH within SCOPE and send them to Anki.
+(defun anki-editor-push-notes (&optional arg match scope)
+  "Build notes from headings that can be matched by MATCH within SCOPE and push them to Anki.
 
-The default search condition `&ANKI_NOTE_TYPE<>\"\"' will be
-appended to MATCH.
+The default search condition `&ANKI_NOTE_TYPE<>\"\"' will always
+be appended to MATCH.
 
 For notes that already exist in Anki (i.e. has `ANKI_NOTE_ID'
 property), only their fields and tags will be updated, change of
@@ -240,25 +258,24 @@ of that heading."
                      scope)
 
     (message (if (= 0 failed)
-                 (format "Successfully submitted %d notes to Anki." acc)
-               (format "Submitted %d notes, %d of which are failed. Check property drawers for failure reasons. Once you've fixed the issues, you could use `anki-editor-retry-failure-notes' to re-submit the failed notes."
-                       acc
-                       failed)))))
+                 (format "Successfully pushed %d notes to Anki." acc)
+               (format "Pushed %d notes, %d of which are failed. Check property drawers for failure reasons. Once you've fixed the issues, you could use `anki-editor-retry-failure-notes' to re-push the failed notes."
+                       acc failed)))))
 
 (defun anki-editor-retry-failure-notes (&optional arg scope)
-  "Re-submit notes that were failed.
+  "Retry pushing notes that were failed.
 This command just calls `anki-editor-submit' with match string
 matching non-empty `ANKI_FAILURE_REASON' properties."
   (interactive "P")
-  (anki-editor-submit arg (concat anki-editor-prop-failure-reason "<>\"\"") scope))
+  (anki-editor-push-notes arg (concat anki-editor-prop-failure-reason "<>\"\"") scope))
 
 (defun anki-editor-insert-deck (&optional arg)
   "Insert a deck heading interactively.
 ARG is used the same way as `M-RET' (org-insert-heading)."
   (interactive "P")
   (message "Fetching decks...")
-  (let* ((decks (sort (anki-editor-deck-names) #'string-lessp))
-         (deckname (completing-read "Choose a deck: " decks)))
+  (let ((deckname (completing-read "Choose a deck: "
+                                   (sort (anki-editor-deck-names) #'string-lessp))))
     (org-insert-heading arg)
     (insert deckname)
     (org-set-property anki-editor-prop-deck deckname)))
@@ -270,13 +287,18 @@ Where the note subtree is placed depends on PREFIX, which is the
 same as how it is used by `M-RET'(org-insert-heading)."
   (interactive "P")
   (message "Fetching note types...")
-  (let ((note-types (sort (anki-editor-note-types) #'string-lessp))
-        note-type note-heading fields)
-    (setq note-type (completing-read "Choose a note type: " note-types))
+  (let ((note-type (completing-read "Choose a note type: "
+                                    (sort (anki-editor-note-types) #'string-lessp)))
+        note-heading fields)
     (message "Fetching note fields...")
-    (setq fields (anki-editor--anki-connect-invoke-result "modelFieldNames" 5 `((modelName . ,note-type)))
-          note-heading (read-from-minibuffer "Enter the heading: " "Item"))
-    (anki-editor--insert-note-skeleton prefix note-heading note-type fields)))
+    (setq fields (anki-editor--anki-connect-invoke-result "modelFieldNames" `((modelName . ,note-type)))
+          note-heading (read-from-minibuffer "Enter the heading: "))
+    (anki-editor--insert-note-skeleton prefix
+                                       (if (string-blank-p note-heading)
+                                           "Item"
+                                         note-heading)
+                                       note-type
+                                       fields)))
 
 (defun anki-editor-cloze-region (&optional arg)
   "Cloze region with number ARG."
@@ -288,7 +310,7 @@ same as how it is used by `M-RET'(org-insert-heading)."
       (delete-region (region-beginning) (region-end))
       (insert (with-output-to-string
                 (princ (format "{{c%d::%s" (or arg 1) region))
-                (unless (string-empty-p (string-trim hint)) (princ (format "::%s" hint)))
+                (unless (string-blank-p hint) (princ (format "::%s" hint)))
                 (princ "}}"))))))
 
 (defun anki-editor-export-subtree-to-html ()
@@ -297,7 +319,7 @@ same as how it is used by `M-RET'(org-insert-heading)."
   (org-export-to-buffer
       anki-editor--ox-anki-html-backend
       anki-editor-buffer-html-output nil t nil t nil
-      (lambda () (html-mode))))
+      #'html-mode))
 
 (defun anki-editor-convert-region-to-html ()
   "Convert and replace region to HTML."
@@ -315,7 +337,7 @@ This is useful when new version of this package depends on the
 bugfixes or new features of AnkiConnect."
   (interactive)
   (when (yes-or-no-p "NOTE: This will download the latest codebase of AnkiConnect to your system, which is not guaranteed to be safe or stable. Generally, you don't need this command, this is useful only when new version of this package requires the updates of AnkiConnect that are not released yet. Do you still want to continue?")
-    (let ((result (anki-editor--anki-connect-invoke-result "upgrade" 5)))
+    (let ((result (anki-editor--anki-connect-invoke-result "upgrade")))
       (when (and (booleanp result) result)
         (message "AnkiConnect has been upgraded, you might have to restart Anki to make it in effect.")))))
 
@@ -323,20 +345,20 @@ bugfixes or new features of AnkiConnect."
 
 (defun anki-editor--process-note-heading ()
   "Process note heading at point."
-  (let (note-elem note)
-    (setq note-elem (org-element-at-point)
-          note-elem (let ((content (buffer-substring
-                                    (org-element-property :begin note-elem)
-                                    ;; in case the buffer is narrowed,
-                                    ;; e.g. by `org-map-entries' when
-                                    ;; scope is `tree'
-                                    (min (point-max) (org-element-property :end note-elem)))))
-                      (with-temp-buffer
-                        (org-mode)
-                        (insert content)
-                        (car (org-element-contents (org-element-parse-buffer)))))
-          note (anki-editor--heading-to-note note-elem))
-    (anki-editor--save-note note)))
+  (-->
+   (org-element-at-point)
+   (let ((content (buffer-substring
+                   (org-element-property :begin it)
+                   ;; in case the buffer is narrowed,
+                   ;; e.g. by `org-map-entries' when
+                   ;; scope is `tree'
+                   (min (point-max) (org-element-property :end it)))))
+     (with-temp-buffer
+       (org-mode)
+       (insert content)
+       (car (org-element-contents (org-element-parse-buffer)))))
+   (anki-editor--heading-to-note it)
+   (anki-editor--save-note it)))
 
 (defun anki-editor--insert-note-skeleton (prefix heading note-type fields)
   "Insert a note subtree (skeleton) with HEADING, NOTE-TYPE and FIELDS.
@@ -356,53 +378,57 @@ Where the subtree is created depends on PREFIX."
       (anki-editor--create-note note)
     (anki-editor--update-note note)))
 
+(defun anki-editor--set-note-id (id)
+  (unless id
+    (error "Note creation failed for unknown reason"))
+  (org-set-property anki-editor-prop-note-id (number-to-string id)))
+
 (defun anki-editor--create-note (note)
   "Request AnkiConnect for creating NOTE."
-  (when anki-editor-create-decks
-    (anki-editor--create-deck (alist-get 'deck note)))
+  (let ((queue (anki-editor--anki-connect-invoke-queue)))
+    (when anki-editor-create-decks
+      (funcall queue
+               'createDeck
+               `((deck . ,(alist-get 'deck note)))))
 
-  (let* ((response (anki-editor--anki-connect-invoke
-                    "addNote" 5 `((note . ,(anki-editor--anki-connect-map-note note)))))
-         (result (alist-get 'result response))
-         (err (alist-get 'error response)))
-    (if result
-        ;; put ID of newly created note in property drawer
-        (org-set-property anki-editor-prop-note-id
-                          (format "%d" (alist-get 'result response)))
-      (error (or err "Sorry, the operation was unsuccessful and detailed information is unavailable.")))))
+    (funcall queue
+             'addNote
+             `((note . ,(anki-editor--anki-connect-map-note note)))
+             #'anki-editor--set-note-id)
+
+    (funcall queue)))
 
 (defun anki-editor--update-note (note)
   "Request AnkiConnect for updating fields and tags of NOTE."
-  (anki-editor--anki-connect-invoke-result
-   "updateNoteFields" 5 `((note . ,(anki-editor--anki-connect-map-note note))))
 
-  ;; update tags
-  (let (existing-note added-tags removed-tags)
-    (setq existing-note (car (anki-editor--anki-connect-invoke-result
-                              "notesInfo" 5 `(("notes" . (,(alist-get 'note-id note))))))
-          added-tags (cl-set-difference (alist-get 'tags note) (alist-get 'tags existing-note) :test #'string-equal)
-          removed-tags (cl-set-difference (alist-get 'tags existing-note) (alist-get 'tags note) :test #'string-equal))
+  (let ((queue (anki-editor--anki-connect-invoke-queue)))
+    (funcall queue
+             'updateNoteFields
+             `((note . ,(anki-editor--anki-connect-map-note note))))
 
-    (when added-tags
-      (anki-editor--anki-connect-invoke-result
-       "addTags" 5 `(("notes" . (,(alist-get 'note-id note)))
-                     ("tags" . ,(mapconcat #'identity added-tags " ")))))
-    (when removed-tags
-      (anki-editor--anki-connect-invoke-result
-       "removeTags" 5 `(("notes" . (,(alist-get 'note-id note)))
-                        ("tags" . ,(mapconcat #'identity removed-tags " ")))))))
+    (funcall queue
+             'notesInfo
+             `((notes . (,(alist-get 'note-id note))))
+             (lambda (result)
+               ;; update tags
+               (let* ((existing-note (car result))
+                      (tags-to-add (-difference (alist-get 'tags note) (alist-get 'tags existing-note)))
+                      (tags-to-remove (-difference (alist-get 'tags existing-note) (alist-get 'tags note)))
+                      (tag-queue (anki-editor--anki-connect-invoke-queue)))
 
-(defun anki-editor--get-allowed-values-for-property (property)
-  "Get allowed values for PROPERTY."
-  (pcase property
-    ((pred (string= anki-editor-prop-deck)) (anki-editor-deck-names))
-    ((pred (string= anki-editor-prop-note-type)) (anki-editor-note-types))
-    (_ nil)))
+                 (when tags-to-add
+                   (funcall tag-queue
+                            'addTags `((notes . (,(alist-get 'note-id note)))
+                                       (tags . ,(mapconcat #'identity tags-to-add " ")))))
 
+                 (when tags-to-remove
+                   (funcall tag-queue
+                            'removeTags `((notes . (,(alist-get 'note-id note)))
+                                          (tags . ,(mapconcat #'identity tags-to-remove " ")))))
 
-(defun anki-editor--create-deck (deck-name)
-  "Request AnkiConnect for creating a deck named DECK-NAME."
-  (anki-editor--anki-connect-invoke-result "createDeck" 5 `((deck . ,deck-name))))
+                 (funcall tag-queue))))
+
+    (funcall queue)))
 
 (defun anki-editor--set-failure-reason (reason)
   "Set failure reason to REASON in property drawer at point."
@@ -412,6 +438,13 @@ Where the subtree is created depends on PREFIX."
   "Clear failure reason in property drawer at point."
   (org-entry-delete nil anki-editor-prop-failure-reason))
 
+(defun anki-editor--get-allowed-values-for-property (property)
+  "Get allowed values for PROPERTY."
+  (pcase property
+    ((pred (string= anki-editor-prop-deck)) (anki-editor-deck-names))
+    ((pred (string= anki-editor-prop-note-type)) (anki-editor-note-types))
+    (_ nil)))
+
 (defun anki-editor-is-valid-org-tag (tag)
   "Check if string TAG can be used as an Org tag."
   (string-match-p anki-editor-org-tag-regexp tag))
@@ -420,13 +453,13 @@ Where the subtree is created depends on PREFIX."
   "Get all tags from Anki."
   (let (anki-tags)
     (prog1
-        (setq anki-tags (anki-editor--anki-connect-invoke-result "getTags" 5))
-      (unless (seq-every-p #'anki-editor-is-valid-org-tag anki-tags)
+        (setq anki-tags (anki-editor--anki-connect-invoke-result "getTags"))
+      (unless (-all? #'anki-editor-is-valid-org-tag anki-tags)
         (warn "Some tags from Anki contain characters that are not valid in Org tags.")))))
 
 (defun anki-editor-deck-names ()
   "Get all decks names from Anki."
-  (anki-editor--anki-connect-invoke-result "deckNames" 5))
+  (anki-editor--anki-connect-invoke-result "deckNames"))
 
 (defun anki-editor--before-set-tags (&optional _ just-align)
   "Build tag list for completion including tags from Anki.
@@ -441,7 +474,7 @@ Do nothing when JUST-ALIGN is non-nil."
   (unless just-align
     (if org-current-tag-alist
         (setq org-current-tag-alist
-              (org-tag-add-to-alist
+              (org--tag-add-to-alist
                (mapcar #'list (anki-editor-all-tags))
                org-current-tag-alist))
       (unless (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags)
@@ -453,17 +486,16 @@ Do nothing when JUST-ALIGN is non-nil."
 
 (defun anki-editor-note-types ()
   "Get note types from Anki."
-  (anki-editor--anki-connect-invoke-result "modelNames" 5))
+  (anki-editor--anki-connect-invoke-result "modelNames"))
 
 (defun anki-editor--heading-to-note (heading)
   "Construct an alist representing a note for HEADING."
   (let ((org-trust-scanner-tags t)
-        deck note-id note-type tags fields)
-    (setq deck (org-entry-get-with-inheritance anki-editor-prop-deck)
-          note-id (org-entry-get nil anki-editor-prop-note-id)
-          note-type (org-entry-get nil anki-editor-prop-note-type)
-          tags (org-get-tags-at)
-          fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading)))
+        (deck (org-entry-get-with-inheritance anki-editor-prop-deck))
+        (note-id (org-entry-get nil anki-editor-prop-note-id))
+        (note-type (org-entry-get nil anki-editor-prop-note-type))
+        (tags (org-get-tags-at))
+        (fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading))))
 
     (unless deck (error "No deck specified"))
     (unless note-type (error "Missing note type"))
@@ -486,6 +518,7 @@ Do nothing when JUST-ALIGN is non-nil."
     `(,field-name . ,(org-export-string-as
                       (org-element-interpret-data contents)
                       anki-editor--ox-anki-html-backend t))))
+
 
 ;;; Org Export Backend
 
@@ -510,7 +543,7 @@ Do nothing when JUST-ALIGN is non-nil."
   "Wrap CONTENT with Anki-style latex markers."
   (format "[latex]%s[/latex]" content))
 
-(defun anki-editor--ox-latex (latex contents info)
+(defun anki-editor--ox-latex (latex _contents _info)
   "Transcode LATEX from Org to HTML.
 CONTENTS is nil.  INFO is a plist holding contextual information."
   (let* ((code (org-element-property :value latex))
@@ -519,7 +552,7 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
     (dolist (map anki-editor--anki-latex-syntax-map)
       (setq code (replace-regexp-in-string (car map) (cdr map) code t t)))
 
-    (when (equal copy code)
+    (when (string= copy code)
       (setq code (anki-editor--wrap-latex
                   (if (eq (org-element-type latex) 'latex-fragment)
                       code
@@ -628,8 +661,6 @@ ox-html.el :)"
                ;; Fuzzy link points to a target or an element.
                (_
                 (let* ((ref (org-export-get-reference destination info))
-                       (org-html-standalone-image-predicate
-                        #'org-html--has-caption-p)
                        (number (cond
                                 (desc nil)
                                 ((org-html-standalone-image-p destination info)
@@ -669,6 +700,7 @@ ox-html.el :)"
                           (org-link-unescape path))))
           ;; No path, only description.  Try to do something useful.
           (t (format "<i>%s</i>" desc)))))
+
 
 ;;; Utilities
 
