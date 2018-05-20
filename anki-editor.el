@@ -471,14 +471,9 @@ Otherwise, advise function `org-get-buffer-tags' to append tags
 from Anki to the result.
 
 Do nothing when JUST-ALIGN is non-nil."
-  (unless just-align
-    (if org-current-tag-alist
-        (setq org-current-tag-alist
-              (org--tag-add-to-alist
-               (mapcar #'list (anki-editor-all-tags))
-               org-current-tag-alist))
-      (unless (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags)
-        (advice-add 'org-get-buffer-tags :around #'anki-editor--get-buffer-tags)))))
+  (unless (or just-align
+              (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags))
+    (advice-add 'org-get-buffer-tags :around #'anki-editor--get-buffer-tags)))
 
 (defun anki-editor--get-buffer-tags (oldfun)
   "Append tags from Anki to the result of applying OLDFUN."
@@ -515,9 +510,15 @@ Do nothing when JUST-ALIGN is non-nil."
                       :raw-value
                       heading)))
         (contents (org-element-contents heading)))
-    `(,field-name . ,(org-export-string-as
-                      (org-element-interpret-data contents)
-                      anki-editor--ox-anki-html-backend t))))
+
+    `(,field-name . ,(or (org-export-string-as
+                          (org-element-interpret-data contents)
+                          anki-editor--ox-anki-html-backend t)
+                         ;; 8.2.10 version of
+                         ;; `org-export-filter-apply-functions'
+                         ;; returns nil for an input of empty string,
+                         ;; which will cause AnkiConnect to fail
+                         ""))))
 
 
 ;;; Org Export Backend
@@ -563,6 +564,8 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
         (replace-regexp-in-string "}}" "} } " code)
       code)))
 
+;; FIXME: since some functions get added and some get removed in
+;; differenct versions of Org, this is going to break
 (defun anki-editor--ox-link (link desc info)
   "Transcode a LINK object from Org to HTML.
 DESC is the description part of the link, or the empty string.
