@@ -272,17 +272,6 @@ matching non-empty `ANKI_FAILURE_REASON' properties."
   (interactive "P")
   (anki-editor-push-notes arg (concat anki-editor-prop-failure-reason "<>\"\"") scope))
 
-(defun anki-editor-insert-deck (&optional arg)
-  "Insert a deck heading interactively.
-ARG is used the same way as `M-RET' (org-insert-heading)."
-  (interactive "P")
-  (message "Fetching decks...")
-  (let ((deckname (completing-read "Choose a deck: "
-                                   (sort (anki-editor-deck-names) #'string-lessp))))
-    (org-insert-heading arg)
-    (insert deckname)
-    (org-set-property anki-editor-prop-deck deckname)))
-
 (defun anki-editor-insert-note (&optional prefix)
   "Insert a note interactively.
 
@@ -290,13 +279,20 @@ Where the note subtree is placed depends on PREFIX, which is the
 same as how it is used by `M-RET'(org-insert-heading)."
   (interactive "P")
   (message "Fetching note types...")
-  (let ((note-type (completing-read "Choose a note type: "
-                                    (sort (anki-editor-note-types) #'string-lessp)))
-        note-heading fields)
-    (message "Fetching note fields...")
-    (setq fields (anki-editor--anki-connect-invoke-result "modelFieldNames" `((modelName . ,note-type)))
-          note-heading (read-from-minibuffer "Enter the heading: "))
+  (let* ((deck (or (org-entry-get-with-inheritance anki-editor-prop-deck)
+                   (progn
+                     (message "Fetching decks...")
+                     (completing-read "Choose a deck: "
+                                      (sort (anki-editor-deck-names) #'string-lessp)))))
+         (note-type (completing-read "Choose a note type: "
+                                     (sort (anki-editor-note-types) #'string-lessp)))
+         (fields (progn
+                   (message "Fetching note fields...")
+                   (anki-editor--anki-connect-invoke-result "modelFieldNames" `((modelName . ,note-type)))))
+         (note-heading (read-from-minibuffer "Enter the note heading (optional): ")))
+
     (anki-editor--insert-note-skeleton prefix
+                                       deck
                                        (if (string-blank-p note-heading)
                                            "Item"
                                          note-heading)
@@ -363,12 +359,22 @@ bugfixes or new features of AnkiConnect."
    (anki-editor--heading-to-note it)
    (anki-editor--save-note it)))
 
-(defun anki-editor--insert-note-skeleton (prefix heading note-type fields)
+(defun anki-editor--insert-note-skeleton (prefix deck heading note-type fields)
   "Insert a note subtree (skeleton) with HEADING, NOTE-TYPE and FIELDS.
 Where the subtree is created depends on PREFIX."
   (org-insert-heading prefix)
   (insert heading)
+
+  (unless (save-excursion
+            (org-up-heading-safe)
+            ;; don't insert `ANKI_DECK' if some ancestor already has
+            ;; the same value
+            (and (not (string-blank-p deck))
+                 (string= deck (org-entry-get-with-inheritance anki-editor-prop-deck))))
+    (org-set-property anki-editor-prop-deck deck))
+
   (org-set-property anki-editor-prop-note-type note-type)
+
   (dolist (field fields)
     (save-excursion
       (org-insert-heading-respect-content)
