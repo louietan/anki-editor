@@ -1,11 +1,34 @@
-* English                                                              :deck:
+#+PROPERTY: ANKI_DECK Default
+
+* Fact
+  :PROPERTIES:
+  :ANKI_NOTE_TYPE: Cloze
+  :END:
+
+** Text
+
+   Cards of this note wil be created in {{c1::Default::which deck ?}}
+
+* Fact
+  :PROPERTIES:
+  :ANKI_DECK: English
+  :ANKI_NOTE_TYPE: Cloze
+  :END:
+
+** Text
+
+   Cards of this note wil be created in {{c1::English::which deck ?}}
+
+* The English Language
+  :PROPERTIES:
+  :ANKI_DECK: English
+  :END:
 
 ** Vocabulary
 
-*** Item                                                               :note:
+*** Item                                                       :vocab:idioms:
     :PROPERTIES:
     :ANKI_NOTE_TYPE: Basic (and reversed card)
-    :ANKI_TAGS: vocab idioms
     :END:
 
 **** Front
@@ -16,12 +39,30 @@
 
      it's raining very hard
 
-* Computing                                                            :deck:
+** Grammar                                                          :grammar:
 
-** Item                                                                :note:
+*** Item
+    :PROPERTIES:
+    :ANKI_NOTE_TYPE: Basic
+    :END:
+
+**** Front
+
+     说出名词从句的形式
+
+**** Back
+
+     1) that + 一个完整的句子, that无实际意义
+     2) 由疑问句改装而成
+
+* Computing
+  :PROPERTIES:
+  :ANKI_DECK: Computing
+  :END:
+
+** Item                                              :lisp:emacs:programming:
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Basic
-   :ANKI_TAGS: lisp emacs programming
    :END:
 
 *** Front
@@ -49,9 +90,12 @@
     </div>
     #+END_EXPORT
 
-* Mathematics                                                          :deck:
+* Math
+  :PROPERTIES:
+  :ANKI_DECK: Mathematics
+  :END:
 
-** Item1                                                               :note:
+** Item1
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Cloze
    :END:
@@ -62,7 +106,7 @@
 
 *** Extra
 
-** Item2                                                               :note:
+** Item2
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Basic
    :END:

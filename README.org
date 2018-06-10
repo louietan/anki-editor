@@ -1,6 +1,6 @@
 [[http://melpa.org/#/anki-editor][file:http://melpa.org/packages/anki-editor-badge.svg]]
 
-anki-editor -- Make Anki Cards in Org-mode
+anki-editor -- Emacs minor mode for making Anki cards with Org
 
 * Installation
 
@@ -11,55 +11,53 @@ anki-editor -- Make Anki Cards in Org-mode
 
   If you have [[http://melpa.org/][MELPA]] in your =package-archives=,
   just =M-x package-install RET anki-editor RET=, or install it
-  manually by downloading and visiting [[anki-editor.el]] in your
+  manually by downloading and visiting [[./anki-editor.el][anki-editor.el]] in your
   emacs buffer, and =M-x package-install-from-buffer RET=.
 
 * Usage
 
-** The Syntax
+** The Layout of Notes
 
    Now you can compose Anki notes in Org syntax, e.g. lists, code
-   blocks, tables, latex fragments / environments, when being
-   submitted to Anki, they will be converted to HTML by Org-mode's
-   HTML backend with specific markers (e.g. latex) translated to the
-   Anki style.
+   examples, tables, embedded latex, when being submitted to Anki,
+   they will be converted to HTML by Org-mode's HTML backend with
+   specific markers (e.g. latex) translated to Anki style.
 
-   The structure of contents is as follow, which is inspired by
-   =org-drill=. See [[./examples.org][examples.org]] for reference.
+   The structure of a note is as follow, which is inspired by
+   =org-drill=. More examples can be found in [[./examples.org][examples.org]].
 
-   #+BEGIN_EXAMPLE
-   * English                                           :deck:
-   ** Vocabulary
-   *** Item                                            :note:
+   #+BEGIN_SRC org
+     ,* Idiom                                                        :vocab:idioms:
        :PROPERTIES:
+       :ANKI_DECK: English
        :ANKI_NOTE_TYPE: Basic (and reversed card)
-       :ANKI_TAGS: vocab idioms
        :END:
-   **** Front
+     ,** Front
         (it's) raining cats and dogs
-   **** Back
+     ,** Back
         it's raining very hard
-   #+END_EXAMPLE
+   #+END_SRC
 
-   - Headings of deck are tagged with =deck=
-   - Headings of note are tagged with =note=
-   - Levels are not significant, but note headings must be descendents
-     of their deck headings
-   - Custom properties of a note heading can be used to specify note
-     type and tags
-   - Subheadings of a note heading are fields of its note type
+   - An Anki note is an Org entry with =ANKI_NOTE_TYPE= property
+   - Anki tags are just Org tags [fn:1]
+   - Other necessary information (e.g. deck, note type) of a note is
+     put in the property drawer of the entry
+     - As the value of =ANKI_DECK= is retrieved with inheritance, you
+       don't have to set it per note, instead, you could create a deck
+       entry with this property set and put note entries under it, or
+       set it per file by ~#+PROPERTY: ANKI_DECK YourDeck~
+   - Child entries of a note entry are fields
 
-** Command Cheatsheet
+** Commands
 
-   | Command                              | Brief Description                                                   |
-   |--------------------------------------+---------------------------------------------------------------------|
-   | =anki-editor-submit=                 | Send notes in current buffer to Anki.                               |
-   | =anki-editor-insert-deck=            | Insert a deck heading.                                              |
-   | =anki-editor-insert-note=            | Insert the skeleton of a note.                                      |
-   | =anki-editor-add-tags=               | Add tags to property drawer of current heading with autocompletion. |
-   | =anki-editor-cloze-region=           | Cloze region.                                                       |
-   | =anki-editor-export-subtree-to-html= | Export subtree of the element at point to HTML.                     |
-   | =anki-editor-convert-region-to-html= | Convert and replace region to HTML.                                 |
+   | Command                              | Brief Description                                                                    |
+   |--------------------------------------+--------------------------------------------------------------------------------------|
+   | =anki-editor-push-notes=             | Push notes to Anki. Additional arguments can be used to restrict the range of notes. |
+   | =anki-editor-retry-failure-notes=    | Same as above, except that it only pushes notes that have =ANKI_FAILURE_REASON=.     |
+   | =anki-editor-insert-note=            | Insert a note entry like =M-RET=, interactively.                                     |
+   | =anki-editor-cloze-region=           | Create a cloze deletion from region.                                                 |
+   | =anki-editor-export-subtree-to-html= | Export the subtree at point to HTML.                                                 |
+   | =anki-editor-convert-region-to-html= | Convert and replace region to HTML.                                                  |
 
    *Since I'm not a native English speaker, let me know if there's any ambiguity or grammatical mistakes.*
 
@@ -67,24 +65,12 @@ anki-editor -- Make Anki Cards in Org-mode
 
   [[./demo.gif]]
 
-* Change Log
-
   *v0.2.2*
   - Adds optional tag inheritance.
   - Adds optional deck creation.
   - Fixes issue #15 (url-encoded file path isn't recognized by shell commands).
 
-  *v0.2.1*
-  - Automatically store media files for links to file when submitting.
-  - =anki-editor-insert-tags= renamed to =anki-editor-add-tags=, with behavior slightly changed.
-  - =anki-editor-export-heading-contents-to-html= renamed to =anki-editor-export-subtree-to-html=.
 
-  *v0.2.0*
-  - Fix =org-element= not functioning correctly in temp buffer.
-  - Add a command to cloze region.
-  - Refactor the code to do the translation with Org's exporting framework.
-  - Add a customization variable to break consecutive braces in latex.
-
-  *v0.1.2*
-  - Make deck/note insertion commands smarter on choosing insertion point.
-  - Fix latex environments being joined with the elements following it.
+[fn:1] It should be noted that Org only allows letters, numbers, =_=
+and =@= in a tag but Anki allows more, so you may have to edit you
+Anki tags before they can be used in Org without any surprise.

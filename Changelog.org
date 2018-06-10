@@ -1,0 +1,39 @@
+* Changelog
+
+** v0.3
+
+   - Removed the concept of "deck heading", decks now are set via
+     =ANKI_DECK= property
+   - Note tags now are set via Org tags
+   - Turned this package into a minor mode, when turned on it extends
+     some Org functions to provide auto-completion for tags,
+     =ANKI_DECK= values etc.
+   - =anki-editor-submit= is renamed to =anki-editor-push-notes= and
+     supports additional parameters to restrict the range of notes to
+     be pushed.
+   - Other internal changes
+
+   There's a [[./fix-notes-0.3.el][fix-notes-0.3.el]] in this repo for migrating old notes.
+
+** v0.2.1
+
+   - Automatically store media files for links to file when submitting.
+   - =anki-editor-insert-tags= renamed to =anki-editor-add-tags=, with
+     behavior slightly changed.
+   - =anki-editor-export-heading-contents-to-html= renamed to
+     =anki-editor-export-subtree-to-html=.
+
+** v0.2
+
+   - Fix =org-element= not functioning correctly in temp buffer.
+   - Add a command to cloze region.
+   - Refactor the code to do the translation with Org's exporting
+     framework.
+   - Add a customization variable to break consecutive braces in latex.
+
+** v0.1.2
+
+   - Make deck/note insertion commands smarter on choosing insertion
+     point.
+   - Fix latex environments being joined with the elements following
+     it.
