@@ -15,6 +15,12 @@
 
    There's a [[./fix-notes-0.3.el][fix-notes-0.3.el]] in this repo for migrating old notes.
 
+** v0.2.2
+
+   - Adds optional tag inheritance.
+   - Adds optional deck creation.
+   - Fixes issue #15 (url-encoded file path isn't recognized by shell commands).
+
 ** v0.2.1
 
    - Automatically store media files for links to file when submitting.

@@ -65,11 +65,6 @@ anki-editor -- Emacs minor mode for making Anki cards with Org
 
   [[./demo.gif]]
 
-  *v0.2.2*
-  - Adds optional tag inheritance.
-  - Adds optional deck creation.
-  - Fixes issue #15 (url-encoded file path isn't recognized by shell commands).
-
 
 [fn:1] It should be noted that Org only allows letters, numbers, =_=
 and =@= in a tag but Anki allows more, so you may have to edit you
