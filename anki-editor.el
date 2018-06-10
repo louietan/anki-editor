@@ -1,11 +1,10 @@
-;;; anki-editor.el --- Make Anki Cards in Org-mode  -*- lexical-binding: t; -*-
+;;; anki-editor.el --- Minor mode for making Anki cards with Org  -*- lexical-binding: t; -*-
 ;;
-;; Copyright (C) 2018 Louie Tan <louietanlei@gmail.com>
+;; Copyright (C) 2018 Lei Tan <louietanlei@gmail.com>
 ;;
-;; Filename: anki-editor.el
 ;; Description: Make Anki Cards in Org-mode
-;; Author: Louie Tan
-;; Version: 0.2.1
+;; Author: Lei Tan
+;; Version: 0.3.0
 ;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.12.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
@@ -19,26 +18,28 @@
 ;;  With this package, you can make cards from something like:
 ;;  (which is inspired by `org-dirll')
 ;;
-;;  * Computing                    :deck:
-;;  ** Item                        :note:
-;;     :PROPERTIES:
-;;     :ANKI_NOTE_TYPE: Basic
-;;     :END:
-;;  *** Front
-;;      How to hello world in elisp ?
-;;  *** Back
-;;      #+BEGIN_SRC emacs-lisp
-;;      (message "Hello, world!")
-;;      #+END_SRC
+;;  * Item                     :emacs:lisp:programming:
+;;    :PROPERTIES:
+;;    :ANKI_DECK: Computing
+;;    :ANKI_NOTE_TYPE: Basic
+;;    :END:
+;;  ** Front
+;;     How to hello world in elisp ?
+;;  ** Back
+;;     #+BEGIN_SRC emacs-lisp
+;;       (message "Hello, world!")
+;;     #+END_SRC
 ;;
-;;  This package leverages Org-mode's built-in HTML backend to
-;;  generate HTML for contents of note fields with specific syntax
-;;  (e.g. latex) translated to Anki style, then save the note to Anki.
+;;  This package extends Org-mode's built-in HTML backend to generate
+;;  HTML for contents of note fields with specific syntax (e.g. latex)
+;;  translated to Anki style, then save the note to Anki.
 ;;
 ;;  For this package to work, you have to setup these external dependencies:
 ;;  - curl
 ;;  - AnkiConnect, an Anki addon that runs an HTTP server to expose
-;;                 Anki functions as RESTful APIs
+;;                 Anki functions as RESTful APIs, see
+;;                 https://github.com/FooSoft/anki-connect#installation
+;;                 for installation instructions
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -122,7 +123,7 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
           (setq action-queue nil))))))
 
 (defun anki-editor--anki-connect-invoke (action &optional params)
-  "Invoke AnkiConnect with ACTION, VERSION and PARAMS."
+  "Invoke AnkiConnect with ACTION and PARAMS."
   (let ((request-body (json-encode (anki-editor--anki-connect-action action params 5)))
         (request-backend 'curl)
         (json-array-type 'list)
@@ -238,10 +239,10 @@ deck or note type are currently not supported.
 If SCOPE is not specified, the following rules are applied to
 determine the scope:
 
-- if there's an active region, it will be set to `region'
-- if called with prefix `C-u', it will be set to `tree'
-- if called with prefix double `C-u', it will be set to `file'
-- if called with prefix triple `C-u', will be set to `agenda'
+- If there's an active region, it will be set to `region'
+- If called with prefix `C-u', it will be set to `tree'
+- If called with prefix double `C-u', it will be set to `file'
+- If called with prefix triple `C-u', will be set to `agenda'
 
 See doc string of `org-map-entries' for what these different options mean.
 
@@ -258,11 +259,11 @@ of that heading."
                  (t nil))))
   (setq match (concat match "&" anki-editor-prop-note-type "<>\"\""))
 
-  (let ((total 0)
+  (let ((total (progn
+                 (message "Counting notes...")
+                 (length (org-map-entries t match scope))))
         (acc 0)
         (failed 0))
-    (message "Counting notes...")
-    (org-map-entries (lambda () (cl-incf total)) match scope)
     (org-map-entries (lambda ()
                        (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
                                 (cl-incf acc) total (buffer-name))
