@@ -128,17 +128,31 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
         (json-array-type 'list)
         reply err)
 
-    (request (format "http://%s:%s"
-                     anki-editor-anki-connect-listening-address
-                     anki-editor-anki-connect-listening-port)
-             :type "POST"
-             :parser 'json-read
-             :data (encode-coding-string request-body 'utf-8)
-             :success (cl-function (lambda (&key data &allow-other-keys)
-                                     (setq reply data)))
-             :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
-                                   (setq err (string-trim (cdr error-thrown)))))
-             :sync t)
+    (let ((response (request (format "http://%s:%s"
+                                     anki-editor-anki-connect-listening-address
+                                     anki-editor-anki-connect-listening-port)
+                             :type "POST"
+                             :parser 'json-read
+                             :data (encode-coding-string request-body 'utf-8)
+                             :success (cl-function (lambda (&key data &allow-other-keys)
+                                                     (setq reply data)))
+                             :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
+                                                   (setq err (string-trim (cdr error-thrown)))))
+                             :sync t)))
+
+      ;; HACK: I expect the behavior of the sync mode to be that
+      ;; callbacks get called before the invocation to `request' ends,
+      ;; but it seems not to be the case (or I get it wrong ?) that
+      ;; sometimes when the curl process finishes, the
+      ;; `request--curl-callback' (the sentinel of the curl process,
+      ;; which calls `request--callback', which subsequently calls the
+      ;; callbacks) get called after `request--curl-sync' ends. Here I
+      ;; check if the `done-p' is nil (which will be set to `t' after
+      ;; callbacks have been called) and call `request--curl-callback'
+      ;; manually.
+      (unless (request-response-done-p response)
+        (request--curl-callback (get-buffer-process (request-response--buffer response)) "finished\n")))
+
     (when err (error "Error communicating with AnkiConnect using cURL: %s" err))
     (or reply (error "Got empty reply from AnkiConnect"))))
 
