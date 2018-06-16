@@ -4,7 +4,7 @@
 ;;
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Lei Tan
-;; Version: 0.3.0
+;; Version: 0.3.1
 ;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.12.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
@@ -208,35 +208,43 @@ The result is the path to the newly stored media file."
    :transcoders '((latex-fragment . anki-editor--ox-latex)
                   (latex-environment . anki-editor--ox-latex))))
 
-(defconst anki-editor--anki-latex-syntax-map
-  `((,(format "^%s" (regexp-quote "$$")) . "[$$]")
-    (,(format "%s$" (regexp-quote "$$")) . "[/$$]")
-    (,(format "^%s" (regexp-quote "$")) . "[$]")
-    (,(format "%s$" (regexp-quote "$")) . "[/$]")
-    (,(format "^%s" (regexp-quote "\\(")) . "[$]")
-    (,(format "%s$" (regexp-quote "\\)")) . "[/$]")
-    (,(format "^%s" (regexp-quote "\\[")) . "[$$]")
-    (,(format "%s$" (regexp-quote "\\]")) . "[/$$]")))
+(defun anki-editor--translate-latex-delimiters (latex-code)
+  (catch 'done
+    (let ((delimiter-map (list (list (cons (format "^%s" (regexp-quote "$$")) "[$$]")
+                                     (cons (format "%s$" (regexp-quote "$$")) "[/$$]"))
+                               (list (cons (format "^%s" (regexp-quote "$")) "[$]")
+                                     (cons (format "%s$" (regexp-quote "$")) "[/$]"))
+                               (list (cons (format "^%s" (regexp-quote "\\(")) "[$]")
+                                     (cons (format "%s$" (regexp-quote "\\)")) "[/$]"))
+                               (list (cons (format "^%s" (regexp-quote "\\[")) "[$$]")
+                                     (cons (format "%s$" (regexp-quote "\\]")) "[/$$]"))))
+          (matched nil))
+      (save-match-data
+        (dolist (pair delimiter-map)
+          (dolist (delimiter pair)
+            (when (setq matched (string-match (car delimiter) latex-code))
+              (setq latex-code (replace-match (cdr delimiter) t t latex-code))))
+          (when matched (throw 'done latex-code)))))
+    latex-code))
 
 (defun anki-editor--wrap-latex (content)
   "Wrap CONTENT with Anki-style latex markers."
-  (format "[latex]%s[/latex]" content))
+  (format "<p><div>[latex]</div>%s<div>[/latex]</div></p>" content))
+
+(defun anki-editor--wrap-div (content)
+  (format "<div>%s</div>" content))
 
 (defun anki-editor--ox-latex (latex _contents _info)
   "Transcode LATEX from Org to HTML.
 CONTENTS is nil.  INFO is a plist holding contextual information."
-  (let* ((code (org-element-property :value latex))
-         (copy code))
-    ;; translate delimiters
-    (dolist (map anki-editor--anki-latex-syntax-map)
-      (setq code (replace-regexp-in-string (car map) (cdr map) code t t)))
-
-    (when (string= copy code)
-      (setq code (anki-editor--wrap-latex
-                  (if (eq (org-element-type latex) 'latex-fragment)
-                      code
-                    (format "\n<pre>\n%s</pre>\n"
-                            (org-remove-indentation code))))))
+  (let ((code (org-remove-indentation (org-element-property :value latex))))
+    (setq code
+          (pcase (org-element-type latex)
+            ('latex-fragment (anki-editor--translate-latex-delimiters code))
+            ('latex-environment (anki-editor--wrap-latex
+                                 (mapconcat #'anki-editor--wrap-div
+                                            (split-string (org-html-encode-plain-text code) "\n")
+                                            "")))))
 
     (if anki-editor-break-consecutive-braces-in-latex
         (replace-regexp-in-string "}}" "} } " code)

@@ -1,5 +1,9 @@
 * Changelog
 
+** v0.3.1
+
+   - Fixes issue #17
+
 ** v0.3
 
    - Removed the concept of "deck heading", decks now are set via
