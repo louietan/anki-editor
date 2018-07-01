@@ -566,11 +566,12 @@ of that heading."
                  (t nil))))
   (setq match (concat match "&" anki-editor-prop-note-type "<>\"\""))
 
-  (let ((total (progn
-                 (message "Counting notes...")
-                 (length (org-map-entries t match scope))))
-        (acc 0)
-        (failed 0))
+  (let* ((org-use-property-inheritance nil)
+         (total (progn
+                  (message "Counting notes...")
+                  (length (org-map-entries t match scope))))
+         (acc 0)
+         (failed 0))
     (org-map-entries (lambda ()
                        (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
                                 (cl-incf acc) total (buffer-name))
