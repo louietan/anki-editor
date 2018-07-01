@@ -2,6 +2,8 @@
 
 anki-editor -- Emacs minor mode for making Anki cards with Org
 
+/Since I'm not a native English speaker, feel free to correct me if
+there were any ambiguity or grammatical mistakes ;-)/
 * Installation
 
   *Requirements*
@@ -59,7 +61,19 @@ anki-editor -- Emacs minor mode for making Anki cards with Org
    | =anki-editor-export-subtree-to-html= | Export the subtree at point to HTML.                                                 |
    | =anki-editor-convert-region-to-html= | Convert and replace region to HTML.                                                  |
 
-   *Since I'm not a native English speaker, let me know if there's any ambiguity or grammatical mistakes.*
+* Limitations
+
+** Tags between Anki and Org
+
+   Because the set of characters allowed in tags is different between
+   Anki and Org, you have to make sure that tags from Anki are
+   compatible with Org and tags in Org could be recognized by Anki.
+
+** Working with Anki add-ons
+
+   This package may not work well when you are using certain Anki
+   add-ons especially those who extend the builtin Anki note editor to
+   automatically fill note field content (e.g. ~Add note id~).
 
 * Demo
 
