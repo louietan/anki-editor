@@ -309,32 +309,11 @@ The implementation is borrowed and simplified from ox-html."
       (funcall oldfun link desc info)))
 
 
-;;; Utilities
-
-(defun anki-editor--get-subheadings (heading)
-  "Get all the subheadings of HEADING."
-  (org-element-map (org-element-contents heading)
-      'headline 'identity nil nil 'headline))
-
-
 ;;; Core Functions
 
 (defun anki-editor--process-note-heading ()
   "Process note heading at point."
-  (-->
-   (org-element-at-point)
-   (let ((content (buffer-substring
-                   (org-element-property :begin it)
-                   ;; in case the buffer is narrowed,
-                   ;; e.g. by `org-map-entries' when
-                   ;; scope is `tree'
-                   (min (point-max) (org-element-property :end it)))))
-     (with-temp-buffer
-       (org-mode)
-       (insert content)
-       (car (org-element-contents (org-element-parse-buffer)))))
-   (anki-editor--heading-to-note it)
-   (anki-editor--save-note it)))
+  (anki-editor--push-note (anki-editor-note-at-point)))
 
 (defun anki-editor--insert-note-skeleton (prefix deck heading note-type fields)
   "Insert a note subtree (skeleton) with HEADING, NOTE-TYPE and FIELDS.
@@ -358,7 +337,7 @@ Where the subtree is created depends on PREFIX."
       (org-do-demote)
       (insert field))))
 
-(defun anki-editor--save-note (note)
+(defun anki-editor--push-note (note)
   "Request AnkiConnect for updating or creating NOTE."
   (if (= (alist-get 'note-id note) -1)
       (anki-editor--create-note note)
@@ -469,14 +448,14 @@ Do nothing when JUST-ALIGN is non-nil."
   "Get note types from Anki."
   (anki-editor--anki-connect-invoke-result "modelNames"))
 
-(defun anki-editor--heading-to-note (heading)
-  "Construct an alist representing a note for HEADING."
+(defun anki-editor-note-at-point ()
+  "Construct an alist representing a note from current entry."
   (let ((org-trust-scanner-tags t)
         (deck (org-entry-get-with-inheritance anki-editor-prop-deck))
         (note-id (org-entry-get nil anki-editor-prop-note-id))
         (note-type (org-entry-get nil anki-editor-prop-note-type))
         (tags (org-get-tags-at))
-        (fields (mapcar #'anki-editor--heading-to-note-field (anki-editor--get-subheadings heading))))
+        (fields (anki-editor--build-fields)))
 
     (unless deck (error "No deck specified"))
     (unless note-type (error "Missing note type"))
@@ -488,23 +467,38 @@ Do nothing when JUST-ALIGN is non-nil."
       (tags . ,tags)
       (fields . ,fields))))
 
-(defun anki-editor--heading-to-note-field (heading)
-  "Convert HEADING to field data, a cons cell, the car of which is the field name, the cdr of which is contens represented in HTML."
-  (let ((inhibit-message t)  ;; suppress echo message from `org-babel-exp-src-block'
-        (field-name (substring-no-properties
-                     (org-element-property
-                      :raw-value
-                      heading)))
-        (contents (org-element-contents heading)))
+(defun anki-editor--build-fields ()
+  "Build a list of fields from subheadings of current heading, each element of which is a cons cell, the car of which is field name and the cdr of which is field content."
+  (save-excursion
+    (let (fields
+          (point-of-last-child (point)))
+      (when (org-goto-first-child)
+        (while (/= point-of-last-child (point))
+          (setq point-of-last-child (point))
+          (let* ((inhibit-message t)  ;; suppress echo message from `org-babel-exp-src-block'
+                 (field-heading (org-element-at-point))
+                 (field-name (substring-no-properties
+                              (org-element-property
+                               :raw-value
+                               field-heading))))
+            (push (cons field-name
+                        (or (org-export-string-as
+                             (buffer-substring
+                              (org-element-property :contents-begin field-heading)
+                              ;; in case the buffer is narrowed,
+                              ;; e.g. by `org-map-entries' when
+                              ;; scope is `tree'
+                              (min (point-max) (org-element-property :contents-end field-heading)))
+                             anki-editor--ox-anki-html-backend t '(:with-toc nil))
 
-    `(,field-name . ,(or (org-export-string-as
-                          (org-element-interpret-data contents)
-                          anki-editor--ox-anki-html-backend t)
-                         ;; 8.2.10 version of
-                         ;; `org-export-filter-apply-functions'
-                         ;; returns nil for an input of empty string,
-                         ;; which will cause AnkiConnect to fail
-                         ""))))
+                            ;; 8.2.10 version of
+                            ;; `org-export-filter-apply-functions'
+                            ;; returns nil for an input of empty string,
+                            ;; which will cause AnkiConnect to fail
+                            ""))
+                  fields)
+            (org-forward-heading-same-level nil t))))
+      (reverse fields))))
 
 
 ;;; Minor mode
@@ -566,6 +560,8 @@ of that heading."
                  (t nil))))
   (setq match (concat match "&" anki-editor-prop-note-type "<>\"\""))
 
+  ;; disable property inheritance temporarily, or all subheadings of a
+  ;; note heading will be counted as note headings as well
   (let* ((org-use-property-inheritance nil)
          (total (progn
                   (message "Counting notes...")
@@ -640,7 +636,7 @@ same as how it is used by `M-RET'(org-insert-heading)."
   (interactive)
   (org-export-to-buffer
       anki-editor--ox-anki-html-backend
-      anki-editor-buffer-html-output nil t nil t nil
+      anki-editor-buffer-html-output nil t nil t '(:with-toc nil)
       #'html-mode))
 
 (defun anki-editor-convert-region-to-html ()
