@@ -311,9 +311,12 @@ The implementation is borrowed and simplified from ox-html."
 
 ;;; Core Functions
 
-(defun anki-editor--process-note-heading ()
-  "Process note heading at point."
-  (anki-editor--push-note (anki-editor-note-at-point)))
+(defun anki-editor-map-note-entries (func &optional match scope &rest skip)
+  "Simple wrapper that calls `org-map-entries' with `&ANKI_NOTE_TYPE<>\"\"' appended to MATCH."
+  ;; disable property inheritance temporarily, or all subheadings of a
+  ;; note heading will be counted as note headings as well
+  (let ((org-use-property-inheritance nil))
+    (org-map-entries func (concat match "&" anki-editor-prop-note-type "<>\"\"") scope skip)))
 
 (defun anki-editor--insert-note-skeleton (prefix deck heading note-type fields)
   "Insert a note subtree (skeleton) with HEADING, NOTE-TYPE and FIELDS.
@@ -480,22 +483,27 @@ Do nothing when JUST-ALIGN is non-nil."
                  (field-name (substring-no-properties
                               (org-element-property
                                :raw-value
-                               field-heading))))
-            (push (cons field-name
-                        (or (org-export-string-as
-                             (buffer-substring
-                              (org-element-property :contents-begin field-heading)
-                              ;; in case the buffer is narrowed,
-                              ;; e.g. by `org-map-entries' when
-                              ;; scope is `tree'
-                              (min (point-max) (org-element-property :contents-end field-heading)))
-                             anki-editor--ox-anki-html-backend t '(:with-toc nil))
+                               field-heading)))
+                 (contents-begin (org-element-property :contents-begin field-heading))
+                 (contents-end (org-element-property :contents-end field-heading)))
 
-                            ;; 8.2.10 version of
-                            ;; `org-export-filter-apply-functions'
-                            ;; returns nil for an input of empty string,
-                            ;; which will cause AnkiConnect to fail
-                            ""))
+            (push (cons field-name
+                        (cond
+                         ((and contents-begin contents-end) (or (org-export-string-as
+                                                                 (buffer-substring
+                                                                  contents-begin
+                                                                  ;; in case the buffer is narrowed,
+                                                                  ;; e.g. by `org-map-entries' when
+                                                                  ;; scope is `tree'
+                                                                  (min (point-max) contents-end))
+                                                                 anki-editor--ox-anki-html-backend t '(:with-toc nil))
+
+                                                                ;; 8.2.10 version of
+                                                                ;; `org-export-filter-apply-functions'
+                                                                ;; returns nil for an input of empty string,
+                                                                ;; which will cause AnkiConnect to fail
+                                                                ""))
+                         (t "")))
                   fields)
             (org-forward-heading-same-level nil t))))
       (reverse fields))))
@@ -558,26 +566,23 @@ of that heading."
                  ((equal arg '(16)) 'file)
                  ((equal arg '(64)) 'agenda)
                  (t nil))))
-  (setq match (concat match "&" anki-editor-prop-note-type "<>\"\""))
 
-  ;; disable property inheritance temporarily, or all subheadings of a
-  ;; note heading will be counted as note headings as well
-  (let* ((org-use-property-inheritance nil)
-         (total (progn
+  (let* ((total (progn
                   (message "Counting notes...")
-                  (length (org-map-entries t match scope))))
+                  (length (anki-editor-map-note-entries t match scope))))
          (acc 0)
          (failed 0))
-    (org-map-entries (lambda ()
-                       (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
-                                (cl-incf acc) total (buffer-name))
-                       (anki-editor--clear-failure-reason)
-                       (condition-case err
-                           (anki-editor--process-note-heading)
-                         (error (cl-incf failed)
-                                (anki-editor--set-failure-reason (error-message-string err)))))
-                     match
-                     scope)
+    (anki-editor-map-note-entries
+     (lambda ()
+       (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
+                (cl-incf acc) total (buffer-name))
+       (anki-editor--clear-failure-reason)
+       (condition-case err
+           (anki-editor--push-note (anki-editor-note-at-point))
+         (error (cl-incf failed)
+                (anki-editor--set-failure-reason (error-message-string err)))))
+     match
+     scope)
 
     (message (if (= 0 failed)
                  (format "Successfully pushed %d notes to Anki." acc)

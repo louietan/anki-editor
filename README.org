@@ -4,6 +4,7 @@ anki-editor -- Emacs minor mode for making Anki cards with Org
 
 /Since I'm not a native English speaker, feel free to correct me if
 there were any ambiguity or grammatical mistakes ;-)/
+
 * Installation
 
   *Requirements*
@@ -60,6 +61,13 @@ there were any ambiguity or grammatical mistakes ;-)/
    | =anki-editor-cloze-region=           | Create a cloze deletion from region.                                                 |
    | =anki-editor-export-subtree-to-html= | Export the subtree at point to HTML.                                                 |
    | =anki-editor-convert-region-to-html= | Convert and replace region to HTML.                                                  |
+
+** Functions
+
+   | Name                         | Description                                                |
+   |------------------------------+------------------------------------------------------------|
+   | anki-editor-map-note-entries | Simple wrapper that calls =org-map-entries=.               |
+   | anki-editor-note-at-point    | Construct an alist representing a note from current entry. |
 
 * Limitations
 
