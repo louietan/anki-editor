@@ -520,13 +520,13 @@ Do nothing when JUST-ALIGN is non-nil."
 
 (defun anki-editor-setup-minor-mode ()
   "Set up this minor mode."
-  (add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property)
+  (add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property nil t)
   (advice-add 'org-set-tags :before #'anki-editor--before-set-tags)
   (advice-add 'org-html-link :around #'anki-editor--ox-html-link))
 
 (defun anki-editor-teardown-minor-mode ()
   "Tear down this minor mode."
-  (remove-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property)
+  (remove-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property t)
   (advice-remove 'org-set-tags #'anki-editor--before-set-tags)
   (when (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags)
     (advice-remove 'org-get-buffer-tags #'anki-editor--get-buffer-tags))
