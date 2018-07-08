@@ -208,6 +208,9 @@ The result is the path to the newly stored media file."
    :transcoders '((latex-fragment . anki-editor--ox-latex)
                   (latex-environment . anki-editor--ox-latex))))
 
+(defconst anki-editor--ox-export-ext-plist
+  '(:with-toc nil :anki-editor-mode t))
+
 (defun anki-editor--translate-latex-delimiters (latex-code)
   (catch 'done
     (let ((delimiter-map (list (list (cons (format "^%s" (regexp-quote "$$")) "[$$]")
@@ -253,7 +256,11 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
 (defun anki-editor--ox-html-link (oldfun link desc info)
   "When LINK is a link to local file, transcodes it to html and stores the target file to Anki, otherwise calls OLDFUN for help.
 The implementation is borrowed and simplified from ox-html."
+
   (or (catch 'giveup
+        (unless (plist-get info :anki-editor-mode)
+          (throw 'giveup nil))
+
         (let* ((type (org-element-property :type link))
                (raw-path (org-element-property :path link))
                (desc (org-string-nw-p desc))
@@ -430,22 +437,15 @@ Where the subtree is created depends on PREFIX."
   (anki-editor--anki-connect-invoke-result "deckNames"))
 
 (defun anki-editor--before-set-tags (&optional _ just-align)
-  "Build tag list for completion including tags from Anki.
-
-When the value of `org-current-tag-alist' is non-nil, just append
-to it.
-
-Otherwise, advise function `org-get-buffer-tags' to append tags
-from Anki to the result.
-
-Do nothing when JUST-ALIGN is non-nil."
-  (unless (or just-align
-              (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags))
-    (advice-add 'org-get-buffer-tags :around #'anki-editor--get-buffer-tags)))
+  "Fetch and cache tags from Anki."
+  (unless (or (not anki-editor-mode) just-align)
+    (setq anki-editor--anki-tags-cache (anki-editor-all-tags))))
 
 (defun anki-editor--get-buffer-tags (oldfun)
   "Append tags from Anki to the result of applying OLDFUN."
-  (append (funcall oldfun) (mapcar #'list (anki-editor-all-tags))))
+  (append (funcall oldfun)
+          (when anki-editor-mode
+            (mapcar #'list anki-editor--anki-tags-cache))))
 
 (defun anki-editor-note-types ()
   "Get note types from Anki."
@@ -496,7 +496,9 @@ Do nothing when JUST-ALIGN is non-nil."
                                                                   ;; e.g. by `org-map-entries' when
                                                                   ;; scope is `tree'
                                                                   (min (point-max) contents-end))
-                                                                 anki-editor--ox-anki-html-backend t '(:with-toc nil))
+                                                                 anki-editor--ox-anki-html-backend
+                                                                 t
+                                                                 anki-editor--ox-export-ext-plist)
 
                                                                 ;; 8.2.10 version of
                                                                 ;; `org-export-filter-apply-functions'
@@ -511,6 +513,8 @@ Do nothing when JUST-ALIGN is non-nil."
 
 ;;; Minor mode
 
+(defvar-local anki-editor--anki-tags-cache nil)
+
 ;;;###autoload
 (define-minor-mode anki-editor-mode
   "anki-eidtor-mode"
@@ -522,15 +526,12 @@ Do nothing when JUST-ALIGN is non-nil."
   "Set up this minor mode."
   (add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property nil t)
   (advice-add 'org-set-tags :before #'anki-editor--before-set-tags)
+  (advice-add 'org-get-buffer-tags :around #'anki-editor--get-buffer-tags)
   (advice-add 'org-html-link :around #'anki-editor--ox-html-link))
 
 (defun anki-editor-teardown-minor-mode ()
   "Tear down this minor mode."
-  (remove-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property t)
-  (advice-remove 'org-set-tags #'anki-editor--before-set-tags)
-  (when (advice-member-p 'anki-editor--get-buffer-tags #'org-get-buffer-tags)
-    (advice-remove 'org-get-buffer-tags #'anki-editor--get-buffer-tags))
-  (advice-remove 'org-html-link #'anki-editor--ox-html-link))
+  (remove-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property t))
 
 
 ;;; Commands
@@ -641,8 +642,7 @@ same as how it is used by `M-RET'(org-insert-heading)."
   (interactive)
   (org-export-to-buffer
       anki-editor--ox-anki-html-backend
-      anki-editor-buffer-html-output nil t nil t '(:with-toc nil)
-      #'html-mode))
+      anki-editor-buffer-html-output nil t nil t anki-editor--ox-export-ext-plist #'html-mode))
 
 (defun anki-editor-convert-region-to-html ()
   "Convert and replace region to HTML."
