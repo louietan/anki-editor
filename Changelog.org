@@ -1,5 +1,12 @@
 * Changelog
 
+** v0.3.2
+
+   - Fixes issue #19
+   - Fixes issue #20
+   - Advising and hook functions execute only when this mode is turned on for current buffer
+   - Exposes two functions: ~anki-editor-map-note-entries~ and ~anki-editor-note-at-point~
+
 ** v0.3.1
 
    - Fixes issue #17
