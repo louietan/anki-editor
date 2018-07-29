@@ -93,6 +93,16 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
   t
   "If nil, tags of entries wont't be counted as Anki tags.")
 
+(defcustom anki-editor-protected-tags
+  '("marked" "leech")
+  "A list of tags that won't be deleted from Anki even though they're absent in Org entries, such as special tags `marked', `leech'."
+  :type '(repeat string))
+
+(defcustom anki-editor-ignored-org-tags
+  (append org-export-select-tags org-export-exclude-tags)
+  "A list of Org tags that are ignored when constructing notes form entries."
+  :type '(repeat string))
+
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
   "The network address AnkiConnect is listening.")
@@ -392,8 +402,12 @@ Where the subtree is created depends on PREFIX."
              (lambda (result)
                ;; update tags
                (let* ((existing-note (car result))
-                      (tags-to-add (-difference (alist-get 'tags note) (alist-get 'tags existing-note)))
-                      (tags-to-remove (-difference (alist-get 'tags existing-note) (alist-get 'tags note)))
+                      (tags-to-add (-difference (-difference (alist-get 'tags note)
+                                                             (alist-get 'tags existing-note))
+                                                anki-editor-ignored-org-tags))
+                      (tags-to-remove (-difference (-difference (alist-get 'tags existing-note)
+                                                                (alist-get 'tags note))
+                                                   anki-editor-protected-tags))
                       (tag-queue (anki-editor--anki-connect-invoke-queue)))
 
                  (when tags-to-add
