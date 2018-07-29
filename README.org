@@ -34,6 +34,7 @@ there were any ambiguity or grammatical mistakes ;-)/
        :PROPERTIES:
        :ANKI_DECK: English
        :ANKI_NOTE_TYPE: Basic (and reversed card)
+       :ANKI_TAGS: languages european_languages
        :END:
      ,** Front
         (it's) raining cats and dogs
@@ -42,7 +43,9 @@ there were any ambiguity or grammatical mistakes ;-)/
    #+END_SRC
 
    - An Anki note is an Org entry with =ANKI_NOTE_TYPE= property
-   - Anki tags are just Org tags [fn:1]
+   - Anki tags can be set in two ways
+     1. With "ANKI_TAGS" property, multiple tags are seperated with space
+     2. With Org tags [fn:1], this could be turned off if you would like to keep Org tags separated from Anki tags
    - Other necessary information (e.g. deck, note type) of a note is
      put in the property drawer of the entry
      - As the value of =ANKI_DECK= is retrieved with inheritance, you
@@ -53,14 +56,14 @@ there were any ambiguity or grammatical mistakes ;-)/
 
 ** Commands
 
-   | Command                              | Brief Description                                                                    |
-   |--------------------------------------+--------------------------------------------------------------------------------------|
-   | =anki-editor-push-notes=             | Push notes to Anki. Additional arguments can be used to restrict the range of notes. |
-   | =anki-editor-retry-failure-notes=    | Same as above, except that it only pushes notes that have =ANKI_FAILURE_REASON=.     |
-   | =anki-editor-insert-note=            | Insert a note entry like =M-RET=, interactively.                                     |
-   | =anki-editor-cloze-region=           | Create a cloze deletion from region.                                                 |
-   | =anki-editor-export-subtree-to-html= | Export the subtree at point to HTML.                                                 |
-   | =anki-editor-convert-region-to-html= | Convert and replace region to HTML.                                                  |
+   | Command                            | Brief Description                                                                    |
+   |------------------------------------+--------------------------------------------------------------------------------------|
+   | anki-editor-push-notes             | Push notes to Anki. Additional arguments can be used to restrict the range of notes. |
+   | anki-editor-retry-failure-notes    | Same as above, except that it only pushes notes that have =ANKI_FAILURE_REASON=.     |
+   | anki-editor-insert-note            | Insert a note entry like =M-RET=, interactively.                                     |
+   | anki-editor-cloze-region           | Create a cloze deletion from region.                                                 |
+   | anki-editor-export-subtree-to-html | Export the subtree at point to HTML.                                                 |
+   | anki-editor-convert-region-to-html | Convert and replace region to HTML.                                                  |
 
 ** Functions
 
@@ -68,6 +71,18 @@ there were any ambiguity or grammatical mistakes ;-)/
    |------------------------------+------------------------------------------------------------|
    | anki-editor-map-note-entries | Simple wrapper that calls =org-map-entries=.               |
    | anki-editor-note-at-point    | Construct an alist representing a note from current entry. |
+
+** Variables
+
+   | Name                                          | Default Value          | Description                                                                                              |
+   |-----------------------------------------------+------------------------+----------------------------------------------------------------------------------------------------------|
+   | anki-editor-anki-connect-listening-address    | "127.0.0.1"            | The network address AnkiConnect is listening.                                                            |
+   | anki-editor-anki-connect-listening-port       | "8765"                 | The port number AnkiConnect is listening.                                                                |
+   | anki-editor-break-consecutive-braces-in-latex | nil                    | If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze. |
+   | anki-editor-create-decks                      | nil                    | If non-nil, creates deck before creating a note.                                                         |
+   | anki-editor-ignored-org-tags                  | '("export" "noexport") | A list of Org tags that are ignored when constructing notes form entries.                                |
+   | anki-editor-org-tags-as-anki-tags             | t                      | If nil, tags of entries wont't be counted as Anki tags.                                                  |
+   | anki-editor-protected-tags                    | '("marked" "leech")    | A list of tags that won't be deleted from Anki even though they're absent in Org entries.                |
 
 * Limitations
 

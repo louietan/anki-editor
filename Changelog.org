@@ -1,4 +1,13 @@
+#+STARTUP: content
+
 * Changelog
+
+** v0.3.3
+
+   - Reenable support for setting tags with =ANKI_TAGS= property
+   - Add a variable =anki-editor-org-tags-as-anki-tags= to make it able to not use Org tags as Anki tags
+   - Add a variable =anki-editor-protected-tags= to protect certain tags from being delete
+   - Add a variable =anki-editor-ignored-org-tags= to ignore special Org tags
 
 ** v0.3.2
 
