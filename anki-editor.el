@@ -4,7 +4,7 @@
 ;;
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Lei Tan
-;; Version: 0.3.2
+;; Version: 0.3.3
 ;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.12.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
@@ -71,6 +71,7 @@
 (defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
 (defconst anki-editor-prop-note-id "ANKI_NOTE_ID")
 (defconst anki-editor-prop-deck "ANKI_DECK")
+(defconst anki-editor-prop-tags "ANKI_TAGS")
 (defconst anki-editor-prop-failure-reason "ANKI_FAILURE_REASON")
 (defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
 (defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
@@ -87,6 +88,10 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 (defcustom anki-editor-create-decks
   nil
   "If non-nil, creates deck before creating a note.")
+
+(defcustom anki-editor-org-tags-as-anki-tags
+  t
+  "If nil, tags of entries wont't be counted as Anki tags.")
 
 (defcustom anki-editor-anki-connect-listening-address
   "127.0.0.1"
@@ -436,15 +441,19 @@ Where the subtree is created depends on PREFIX."
   "Get all decks names from Anki."
   (anki-editor--anki-connect-invoke-result "deckNames"))
 
+(defun anki-editor--enable-tag-completion ()
+  (and anki-editor-mode anki-editor-org-tags-as-anki-tags))
+
 (defun anki-editor--before-set-tags (&optional _ just-align)
   "Fetch and cache tags from Anki."
-  (unless (or (not anki-editor-mode) just-align)
+  (when (and (anki-editor--enable-tag-completion)
+             (not just-align))
     (setq anki-editor--anki-tags-cache (anki-editor-all-tags))))
 
 (defun anki-editor--get-buffer-tags (oldfun)
   "Append tags from Anki to the result of applying OLDFUN."
   (append (funcall oldfun)
-          (when anki-editor-mode
+          (when (anki-editor--enable-tag-completion)
             (mapcar #'list anki-editor--anki-tags-cache))))
 
 (defun anki-editor-note-types ()
@@ -457,7 +466,7 @@ Where the subtree is created depends on PREFIX."
         (deck (org-entry-get-with-inheritance anki-editor-prop-deck))
         (note-id (org-entry-get nil anki-editor-prop-note-id))
         (note-type (org-entry-get nil anki-editor-prop-note-type))
-        (tags (org-get-tags-at))
+        (tags (anki-editor--get-tags))
         (fields (anki-editor--build-fields)))
 
     (unless deck (error "No deck specified"))
@@ -469,6 +478,14 @@ Where the subtree is created depends on PREFIX."
       (note-type . ,note-type)
       (tags . ,tags)
       (fields . ,fields))))
+
+(defun anki-editor--get-tags ()
+  (let ((tags (org-entry-get-multivalued-property
+               nil
+               anki-editor-prop-tags)))
+    (if anki-editor-org-tags-as-anki-tags
+        (append tags (org-get-tags-at))
+      tags)))
 
 (defun anki-editor--build-fields ()
   "Build a list of fields from subheadings of current heading, each element of which is a cons cell, the car of which is field name and the cdr of which is field content."
