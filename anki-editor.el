@@ -437,6 +437,7 @@ Where the subtree is created depends on PREFIX."
   (pcase property
     ((pred (string= anki-editor-prop-deck)) (anki-editor-deck-names))
     ((pred (string= anki-editor-prop-note-type)) (anki-editor-note-types))
+    ((pred (string= anki-editor-prop-tags)) (anki-editor-all-tags))
     (_ nil)))
 
 (defun anki-editor-is-valid-org-tag (tag)
@@ -445,11 +446,7 @@ Where the subtree is created depends on PREFIX."
 
 (defun anki-editor-all-tags ()
   "Get all tags from Anki."
-  (let (anki-tags)
-    (prog1
-        (setq anki-tags (anki-editor--anki-connect-invoke-result "getTags"))
-      (unless (-all? #'anki-editor-is-valid-org-tag anki-tags)
-        (warn "Some tags from Anki contain characters that are not valid in Org tags.")))))
+  (anki-editor--anki-connect-invoke-result "getTags"))
 
 (defun anki-editor-deck-names ()
   "Get all decks names from Anki."
@@ -462,7 +459,9 @@ Where the subtree is created depends on PREFIX."
   "Fetch and cache tags from Anki."
   (when (and (anki-editor--enable-tag-completion)
              (not just-align))
-    (setq anki-editor--anki-tags-cache (anki-editor-all-tags))))
+    (setq anki-editor--anki-tags-cache (anki-editor-all-tags))
+    (unless (-all? #'anki-editor-is-valid-org-tag anki-editor--anki-tags-cache)
+      (warn "Some tags from Anki contain characters that are not valid in Org tags."))))
 
 (defun anki-editor--get-buffer-tags (oldfun)
   "Append tags from Anki to the result of applying OLDFUN."
