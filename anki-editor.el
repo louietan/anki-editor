@@ -12,7 +12,6 @@
 ;;
 ;;; Commentary:
 ;;
-;;  This package is for people who use Anki as SRS but would like to
 ;;  make cards in Org-mode.
 ;;
 ;;  With this package, you can make cards from something like:
@@ -313,6 +312,10 @@ The implementation is borrowed and simplified from ox-html."
                  (org-export-inline-image-p
                   link (plist-get info :html-inline-image-rules)))
             (org-html--format-image path attributes-plist info))
+
+           ;; Audio file.
+           ((string-suffix-p ".mp3" path t)
+              (format "[sound:%s]" path))
 
            ;; External link with a description part.
            ((and path desc) (format "<a href=\"%s\"%s>%s</a>"
