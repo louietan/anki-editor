@@ -12,6 +12,7 @@
 ;;
 ;;; Commentary:
 ;;
+;;  This package is for people who use Anki as SRS but would like to
 ;;  make cards in Org-mode.
 ;;
 ;;  With this package, you can make cards from something like:
