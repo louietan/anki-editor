@@ -314,6 +314,10 @@ The implementation is borrowed and simplified from ox-html."
                   link (plist-get info :html-inline-image-rules)))
             (org-html--format-image path attributes-plist info))
 
+           ;; Audio file.
+           ((string-suffix-p ".mp3" path t)
+              (format "[sound:%s]" path))
+
            ;; External link with a description part.
            ((and path desc) (format "<a href=\"%s\"%s>%s</a>"
                                     (org-html-encode-plain-text path)
