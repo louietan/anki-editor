@@ -658,12 +658,11 @@ same as how it is used by `M-RET'(org-insert-heading)."
                                        note-type
                                        fields)))
 
-(defun anki-editor-cloze-region (&optional arg)
+(defun anki-editor-cloze-region (&optional arg hint)
   "Cloze region with number ARG."
-  (interactive "p")
+  (interactive "p\nsHint (optional): ")
   (unless (region-active-p) (error "No active region"))
-  (let ((region (buffer-substring (region-beginning) (region-end)))
-        (hint (read-from-minibuffer "Hint (optional): ")))
+  (let ((region (buffer-substring (region-beginning) (region-end))))
     (save-excursion
       (delete-region (region-beginning) (region-end))
       (insert (with-output-to-string
