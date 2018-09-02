@@ -662,9 +662,13 @@ same as how it is used by `M-RET'(org-insert-heading)."
   "Cloze region with number ARG."
   (interactive "p\nsHint (optional): ")
   (unless (region-active-p) (error "No active region"))
-  (let ((region (buffer-substring (region-beginning) (region-end))))
+  (anki-editor-cloze (region-beginning) (region-end)))
+
+(defun anki-editor-cloze (begin end arg hint)
+  "Cloze region from BEGIN to END with number ARG."
+  (let ((region (buffer-substring begin end)))
     (save-excursion
-      (delete-region (region-beginning) (region-end))
+      (delete-region begin end)
       (insert (with-output-to-string
                 (princ (format "{{c%d::%s" (or arg 1) region))
                 (unless (string-blank-p hint) (princ (format "::%s" hint)))
