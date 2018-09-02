@@ -664,6 +664,15 @@ same as how it is used by `M-RET'(org-insert-heading)."
   (unless (region-active-p) (error "No active region"))
   (anki-editor-cloze (region-beginning) (region-end)))
 
+(defun anki-editor-cloze-dwim (&optional arg hint)
+  "Cloze current active region or a word the under the cursor"
+  (interactive "p\nsHint (optional): ")
+  (cond
+   ((region-active-p) (anki-editor-cloze (region-beginning) (region-end)))
+   ((thing-at-point 'word) (let ((bounds (bounds-of-thing-at-point 'word)))
+                             (anki-editor-cloze (car bounds) (cdr bounds) arg hint)))
+   (t (error "Nothing to create cloze from"))))
+
 (defun anki-editor-cloze (begin end arg hint)
   "Cloze region from BEGIN to END with number ARG."
   (let ((region (buffer-substring begin end)))
