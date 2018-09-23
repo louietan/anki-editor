@@ -72,6 +72,7 @@
 (defconst anki-editor-prop-note-id "ANKI_NOTE_ID")
 (defconst anki-editor-prop-deck "ANKI_DECK")
 (defconst anki-editor-prop-tags "ANKI_TAGS")
+(defconst anki-editor-prop-tags-plus (concat anki-editor-prop-tags "+"))
 (defconst anki-editor-prop-failure-reason "ANKI_FAILURE_REASON")
 (defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
 (defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
@@ -441,7 +442,7 @@ Where the subtree is created depends on PREFIX."
   (pcase property
     ((pred (string= anki-editor-prop-deck)) (anki-editor-deck-names))
     ((pred (string= anki-editor-prop-note-type)) (anki-editor-note-types))
-    ((pred (string= anki-editor-prop-tags)) (anki-editor-all-tags))
+    ((pred (string-match-p (format "%s\\+?" anki-editor-prop-tags))) (anki-editor-all-tags))
     (_ nil)))
 
 (defun anki-editor-is-valid-org-tag (tag)
@@ -497,12 +498,18 @@ Where the subtree is created depends on PREFIX."
       (fields . ,fields))))
 
 (defun anki-editor--get-tags ()
-  (let ((tags (org-entry-get-multivalued-property
+  (let ((tags (anki-editor--entry-get-multivalued-property-with-inheritance
                nil
                anki-editor-prop-tags)))
     (if anki-editor-org-tags-as-anki-tags
         (append tags (org-get-tags-at))
       tags)))
+
+(defun anki-editor--entry-get-multivalued-property-with-inheritance (pom property)
+  "Return a list of values in a multivalued property with inheritance."
+  (let* ((value (org-entry-get pom property t))
+	     (values (and value (split-string value))))
+    (mapcar #'org-entry-restore-space values)))
 
 (defun anki-editor--build-fields ()
   "Build a list of fields from subheadings of current heading, each element of which is a cons cell, the car of which is field name and the cdr of which is field content."
@@ -548,6 +555,23 @@ Where the subtree is created depends on PREFIX."
 ;;; Minor mode
 
 (defvar-local anki-editor--anki-tags-cache nil)
+
+(defun anki-editor--concat-multivalued-property-value (prop value)
+  (let ((old-values (org-entry-get-multivalued-property nil prop)))
+    (unless (string-suffix-p prop "+")
+      (setq old-values (-difference old-values (org-entry-get-multivalued-property nil (concat prop "+")))))
+    (mapconcat #'org-entry-protect-space
+               (append old-values (list value))
+               " ")))
+
+(setq org-properties-postprocess-alist
+      (append org-properties-postprocess-alist
+              (list (cons anki-editor-prop-tags
+                          (lambda (value)
+                            (anki-editor--concat-multivalued-property-value anki-editor-prop-tags value)))
+                    (cons anki-editor-prop-tags-plus
+                          (lambda (value)
+                            (anki-editor--concat-multivalued-property-value anki-editor-prop-tags-plus value))))))
 
 ;;;###autoload
 (define-minor-mode anki-editor-mode
