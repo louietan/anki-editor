@@ -197,22 +197,27 @@ The result is the path to the newly stored media file."
   (unless (-all? #'executable-find '("base64" "sha1sum"))
     (error "Please make sure `base64' and `sha1sum' are available from your shell, which are required for storing media files"))
 
-  (let* ((content (string-trim
-                   (shell-command-to-string
-                    (format "base64 --wrap=0 %s"
-                            (shell-quote-argument path)))))
-         (hash (string-trim
+  (let* ((hash (string-trim
                 (shell-command-to-string
                  (format "sha1sum %s | awk '{print $1}'"
                          (shell-quote-argument path)))))
          (media-file-name (format "%s-%s%s"
                                   (file-name-base path)
                                   hash
-                                  (file-name-extension path t))))
-    (anki-editor--anki-connect-invoke-result
-     "storeMediaFile"
-     `((filename . ,media-file-name)
-       (data . ,content)))
+                                  (file-name-extension path t)))
+         content)
+    (when (equal :json-false (anki-editor--anki-connect-invoke-result
+                              "retrieveMediaFile"
+                              `((filename . ,media-file-name))))
+      (message "Storing media file to Anki for %s..." path)
+      (setq content (string-trim
+                     (shell-command-to-string
+                      (format "base64 --wrap=0 %s"
+                              (shell-quote-argument path)))))
+      (anki-editor--anki-connect-invoke-result
+       "storeMediaFile"
+       `((filename . ,media-file-name)
+         (data . ,content))))
     media-file-name))
 
 
@@ -292,7 +297,6 @@ The implementation is borrowed and simplified from ox-html."
                                (plist-get info :html-link-use-abs-url)
                                (file-name-absolute-p raw-path))
                       (setq raw-path (concat (file-name-as-directory home) raw-path)))
-                    (message "Storing media file to Anki for %s..." raw-path)
                     ;; storing file to Anki and return the modified path
                     (anki-editor--anki-connect-store-media-file (expand-file-name (url-unhex-string raw-path)))))
                  (t (throw 'giveup nil))))
