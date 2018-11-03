@@ -690,7 +690,7 @@ same as how it is used by `M-RET'(org-insert-heading)."
   "Cloze region with number ARG."
   (interactive "p\nsHint (optional): ")
   (unless (region-active-p) (error "No active region"))
-  (anki-editor-cloze (region-beginning) (region-end)))
+  (anki-editor-cloze (region-beginning) (region-end) arg hint))
 
 (defun anki-editor-cloze-dwim (&optional arg hint)
   "Cloze current active region or a word the under the cursor"
