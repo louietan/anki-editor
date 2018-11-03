@@ -696,7 +696,7 @@ same as how it is used by `M-RET'(org-insert-heading)."
   "Cloze current active region or a word the under the cursor"
   (interactive "p\nsHint (optional): ")
   (cond
-   ((region-active-p) (anki-editor-cloze (region-beginning) (region-end)))
+   ((region-active-p) (anki-editor-cloze (region-beginning) (region-end) arg hint))
    ((thing-at-point 'word) (let ((bounds (bounds-of-thing-at-point 'word)))
                              (anki-editor-cloze (car bounds) (cdr bounds) arg hint)))
    (t (error "Nothing to create cloze from"))))
