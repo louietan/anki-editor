@@ -194,9 +194,6 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 (defun anki-editor--anki-connect-store-media-file (path)
   "Store media file for PATH, which is an absolute file name.
 The result is the path to the newly stored media file."
-  (unless (-all? #'executable-find '("base64" "sha1sum"))
-    (error "Please make sure `base64' and `sha1sum' are available from your shell, which are required for storing media files"))
-
   (let* ((hash (secure-hash 'sha1 path))
          (media-file-name (format "%s-%s%s"
                                   (file-name-base path)
