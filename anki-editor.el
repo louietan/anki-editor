@@ -210,10 +210,10 @@ The result is the path to the newly stored media file."
                               "retrieveMediaFile"
                               `((filename . ,media-file-name))))
       (message "Storing media file to Anki for %s..." path)
-      (setq content (string-trim
-                     (shell-command-to-string
-                      (format "base64 --wrap=0 %s"
-                              (shell-quote-argument path)))))
+      (setq content (base64-encode-string
+		     (with-temp-buffer
+		       (insert-file-contents path)
+		       (buffer-string))))
       (anki-editor--anki-connect-invoke-result
        "storeMediaFile"
        `((filename . ,media-file-name)
