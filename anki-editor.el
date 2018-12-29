@@ -197,10 +197,7 @@ The result is the path to the newly stored media file."
   (unless (-all? #'executable-find '("base64" "sha1sum"))
     (error "Please make sure `base64' and `sha1sum' are available from your shell, which are required for storing media files"))
 
-  (let* ((hash (string-trim
-                (shell-command-to-string
-                 (format "sha1sum %s | awk '{print $1}'"
-                         (shell-quote-argument path)))))
+  (let* ((hash (secure-hash 'sha1 path))
          (media-file-name (format "%s-%s%s"
                                   (file-name-base path)
                                   hash
