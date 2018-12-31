@@ -194,13 +194,7 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 (defun anki-editor--anki-connect-store-media-file (path)
   "Store media file for PATH, which is an absolute file name.
 The result is the path to the newly stored media file."
-  (unless (-all? #'executable-find '("base64" "sha1sum"))
-    (error "Please make sure `base64' and `sha1sum' are available from your shell, which are required for storing media files"))
-
-  (let* ((hash (string-trim
-                (shell-command-to-string
-                 (format "sha1sum %s | awk '{print $1}'"
-                         (shell-quote-argument path)))))
+  (let* ((hash (secure-hash 'sha1 path))
          (media-file-name (format "%s-%s%s"
                                   (file-name-base path)
                                   hash
@@ -210,10 +204,10 @@ The result is the path to the newly stored media file."
                               "retrieveMediaFile"
                               `((filename . ,media-file-name))))
       (message "Storing media file to Anki for %s..." path)
-      (setq content (string-trim
-                     (shell-command-to-string
-                      (format "base64 --wrap=0 %s"
-                              (shell-quote-argument path)))))
+      (setq content (base64-encode-string
+		     (with-temp-buffer
+		       (insert-file-contents path)
+		       (buffer-string))))
       (anki-editor--anki-connect-invoke-result
        "storeMediaFile"
        `((filename . ,media-file-name)
