@@ -573,7 +573,7 @@ Where the subtree is created depends on PREFIX."
 
 ;;;###autoload
 (define-minor-mode anki-editor-mode
-  "anki-eidtor-mode"
+  "anki-editor-mode"
   :lighter " anki-editor"
   (if anki-editor-mode (anki-editor-setup-minor-mode)
     (anki-editor-teardown-minor-mode)))
