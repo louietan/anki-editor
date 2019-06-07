@@ -174,7 +174,10 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
      .result))
 
 (defun anki-editor--anki-connect-invoke-multi (&rest actions)
-  (-zip-with (lambda (result handler) (and handler (funcall handler result)))
+  (-zip-with (lambda (result handler)
+               (when-let ((err (alist-get 'error result)))
+                 (error err))
+               (and handler (funcall handler result)))
              (anki-editor--anki-connect-invoke-result
               "multi" `((actions . ,(mapcar #'car actions))))
              (mapcar #'cdr actions)))
