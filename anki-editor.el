@@ -177,7 +177,8 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 
 (defun anki-editor--anki-connect-invoke-multi (&rest actions)
   (-zip-with (lambda (result handler)
-               (when-let ((err (alist-get 'error result)))
+               (when-let (((listp result))
+                          (err (alist-get 'error result)))
                  (error err))
                (and handler (funcall handler result)))
              (anki-editor--anki-connect-invoke-result
