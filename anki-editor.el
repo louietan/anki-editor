@@ -153,16 +153,10 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
                                                    (setq err (string-trim (cdr error-thrown)))))
                              :sync t)))
 
-      ;; HACK: I expect the behavior of the sync mode to be that
-      ;; callbacks get called before the invocation to `request' ends,
-      ;; but it seems not to be the case (or I get it wrong ?) that
-      ;; sometimes when the curl process finishes, the
-      ;; `request--curl-callback' (the sentinel of the curl process,
-      ;; which calls `request--callback', which subsequently calls the
-      ;; callbacks) get called after `request--curl-sync' ends. Here I
-      ;; check if the `done-p' is nil (which will be set to `t' after
-      ;; callbacks have been called) and call `request--curl-callback'
-      ;; manually.
+      ;; HACK: With sync set to t, `request' waits for curl process to
+      ;; exit, then response data becomes available, but callbacks
+      ;; might not be called right away but at a later time, that's
+      ;; why here we manually invoke callbacks to receive the result.
       (unless (request-response-done-p response)
         (request--curl-callback (get-buffer-process (request-response--buffer response)) "finished\n")))
 
