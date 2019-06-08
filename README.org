@@ -44,7 +44,7 @@ there were any ambiguity or grammatical mistakes ;-)/
 
    - An Anki note is an Org entry with =ANKI_NOTE_TYPE= property
    - Anki tags can be set in two ways
-     1. With "ANKI_TAGS" property, multiple tags are seperated with space
+     1. With "ANKI_TAGS" property, multiple tags are separated with space
      2. With Org tags [fn:1], this could be turned off if you would like to keep Org tags separated from Anki tags
    - Other necessary information (e.g. deck, note type) of a note is
      put in the property drawer of the entry
@@ -97,6 +97,41 @@ there were any ambiguity or grammatical mistakes ;-)/
    This package may not work well when you are using certain Anki
    add-ons especially those who extend the builtin Anki note editor to
    automatically fill note field content (e.g. ~Add note id~).
+
+* Troubleshooting
+
+  In case of a failed operation and this package doesn't provide much
+  useful information, especially for note creation, don't be
+  frustrated, see below for some hints.
+
+  1. Decks don't exist in Anki. This package by default doesn't create
+     decks for you, when trying out this package with ~examples.org~,
+     you might find that every single note creation fails, simply
+     because they're fake decks that might not be in your Anki
+     collection. If you'd like it to automatically create missing
+     decks, set ~anki-editor-create-decks~ to ~t~.
+
+  2. Note is counted as a duplicate. From [[https://apps.ankiweb.net/docs/manual.html#adding-cards-and-notes][Anki docs]]
+     #+BEGIN_QUOTE
+     Anki checks the first field for uniqueness, so it will warn you
+     if you enter two cards with a Front field of “apple” (for
+     example). The uniqueness check is limited to the current note
+     type, so if you’re studying multiple languages, two cards with
+     the same Front would not be listed as duplicates as long as you
+     had a different note type for each language.
+     #+END_QUOTE
+
+  If all the above don't help, then we have to go deeper to find out
+  what goes wrong. Here are some methods:
+
+  - Turn on logging in ~request.el~. Customize ~request-log-level~ to
+    ~debug~, retry failed actions and switch to buffer
+    ~ *request-log*~ (there's a leading space, see [[https://www.emacswiki.org/emacs/InvisibleBuffers][invisible buffer]])
+    to get logs from ~request.el~. This way we can't inspect the
+    request payload, since it's dumped into a temp file that's deleted
+    when request finishes.
+  - Use a traffic sniffer to inspect communications between Emacs and
+    Anki.
 
 * Demo
 
