@@ -5,7 +5,7 @@
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Lei Tan
 ;; Version: 0.3.3
-;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.12.0"))
+;; Package-Requires: ((emacs "25") (request "0.3.1") (dash "2.12.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
