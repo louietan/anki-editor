@@ -146,20 +146,12 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
                                      anki-editor-anki-connect-listening-port)
                              :type "POST"
                              :parser 'json-read
-                             :data (encode-coding-string request-body 'utf-8)
+                             :data request-body
                              :success (cl-function (lambda (&key data &allow-other-keys)
                                                      (setq reply data)))
                              :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
                                                    (setq err (string-trim (cdr error-thrown)))))
-                             :sync t)))
-
-      ;; HACK: With sync set to t, `request' waits for curl process to
-      ;; exit, then response data becomes available, but callbacks
-      ;; might not be called right away but at a later time, that's
-      ;; why here we manually invoke callbacks to receive the result.
-      (unless (request-response-done-p response)
-        (request--curl-callback (get-buffer-process (request-response--buffer response)) "finished\n")))
-
+                             :sync t))))
     (when err (error "Error communicating with AnkiConnect using cURL: %s" err))
     (or reply (error "Got empty reply from AnkiConnect"))))
 
