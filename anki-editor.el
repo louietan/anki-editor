@@ -163,7 +163,7 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 
 (defun anki-editor--anki-connect-invoke-multi (&rest actions)
   (-zip-with (lambda (result handler)
-               (when-let (((listp result))
+               (when-let ((_ (listp result))
                           (err (alist-get 'error result)))
                  (error err))
                (and handler (funcall handler result)))
@@ -666,7 +666,7 @@ of that heading."
        (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
                 (cl-incf acc) total (buffer-name))
        (anki-editor--clear-failure-reason)
-       (condition-case err
+       (condition-case-unless-debug err
            (anki-editor--push-note (anki-editor-note-at-point))
          (error (cl-incf failed)
                 (anki-editor--set-failure-reason (error-message-string err)))))
