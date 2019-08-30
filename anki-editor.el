@@ -5,7 +5,7 @@
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Lei Tan
 ;; Version: 0.3.3
-;; Package-Requires: ((emacs "25") (request "20190819") (dash "2.12.0"))
+;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.12.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -151,7 +151,15 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
                                                      (setq reply data)))
                              :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
                                                    (setq err (string-trim (cdr error-thrown)))))
-                             :sync t))))
+                             :sync t)))
+
+      ;; HACK: With sync set to t, `request' waits for curl process to
+      ;; exit, then response data becomes available, but callbacks
+      ;; might not be called right away but at a later time, that's
+      ;; why here we manually invoke callbacks to receive the result.
+      (unless (request-response-done-p response)
+        (request--curl-callback (get-buffer-process (request-response--buffer response)) "finished\n")))
+
     (when err (error "Error communicating with AnkiConnect using cURL: %s" err))
     (or reply (error "Got empty reply from AnkiConnect"))))
 
