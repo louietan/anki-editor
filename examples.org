@@ -1,32 +1,32 @@
 #+PROPERTY: ANKI_DECK Default
 
-* Fact
+* Deck in file
   :PROPERTIES:
   :ANKI_NOTE_TYPE: Cloze
   :END:
 
 ** Text
 
-   Cards of this note wil be created in {{c1::Default::which deck ?}}
+   Cards of this note will be created in {{c1::Default::which deck?}}
 
-* Fact
+* Deck in entry
   :PROPERTIES:
-  :ANKI_DECK: English
+  :ANKI_DECK: Languages
   :ANKI_NOTE_TYPE: Cloze
   :END:
 
 ** Text
 
-   Cards of this note wil be created in {{c1::English::which deck ?}}
+   Cards of this note will be created in {{c1::Languages::which deck?}}
 
-* The English Language
+* Languages
   :PROPERTIES:
-  :ANKI_DECK: English
+  :ANKI_DECK: Languages
   :END:
 
 ** Vocabulary
 
-*** Item                                                       :vocab:idioms:
+*** Raining                                            :vocab:idioms:english:
     :PROPERTIES:
     :ANKI_NOTE_TYPE: Basic (and reversed card)
     :END:
@@ -39,35 +39,51 @@
 
      it's raining very hard
 
-** Grammar                                                          :grammar:
+** Grammar                                                  :grammar:english:
 
-*** Item
+*** 名词从句
     :PROPERTIES:
     :ANKI_NOTE_TYPE: Basic
     :END:
 
 **** Front
 
-     说出名词从句的形式
+     名词从句有哪些形式？
 
 **** Back
 
-     1) that + 一个完整的句子, that无实际意义
+     1) That + 一个完整的句子, that无实际意义
      2) 由疑问句改装而成
+
+** Dialects
+
+*** Cantonese
+    :PROPERTIES:
+    :ANKI_NOTE_TYPE: Basic (and reversed card)
+    :ANKI_TAGS: dialect cantonese
+    :END:
+
+**** Front
+
+     食咗饭未吖？
+
+**** Back
+
+     吃过饭了没？
 
 * Computing
   :PROPERTIES:
   :ANKI_DECK: Computing
   :END:
 
-** Item                                              :lisp:emacs:programming:
+** Emacs Lisp                                        :lisp:emacs:programming:
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Basic
    :END:
 
 *** Front
 
-    How to trap errors in elisp ?
+    How to trap errors in emacs lisp?
 
 *** Back
 
@@ -95,32 +111,19 @@
   :ANKI_DECK: Mathematics
   :END:
 
-** Item1
-   :PROPERTIES:
-   :ANKI_NOTE_TYPE: Cloze
-   :END:
-
-*** Text
-
-    The dot product of two vectors is {{c1::$|\alpha| \cdot |\beta| \cos{\varphi}$}}
-
-*** Extra
-
-** Item2
+** Dot product
    :PROPERTIES:
    :ANKI_NOTE_TYPE: Basic
    :END:
 
 *** Front
 
-    Given two vectors:
+    How to calculate the dot product of two vectors:
 
     \begin{equation*}
     \alpha = \{a_1, a_2, a_3\}, \beta = \{b_1, b_2, b_3\}
     \end{equation*}
 
-    What's the result of $\alpha \cdot \beta$ ?
-
 *** Back
 
-    \[a_1b_1 + a_2b_2 + a_3b_3\]
+    \[\alpha \cdot \beta = a_1b_1 + a_2b_2 + a_3b_3\]
