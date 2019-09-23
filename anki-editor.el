@@ -11,20 +11,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Commentary:
+;; 
+;;  This package is for users of both Emacs and Anki, who'd like to
+;;  make Anki cards in Org mode.  With this package, Anki cards can be
+;;  made from an Org buffer like below: (inspired by org-drill)
 ;;
-;;  This package is for people who use Anki as SRS but would like to
-;;  make cards in Org-mode.
-;;
-;;  With this package, you can make cards from something like:
-;;  (which is inspired by `org-dirll')
-;;
-;;  * Item                     :emacs:lisp:programming:
+;;  * Sample                  :emacs:lisp:programming:
 ;;    :PROPERTIES:
 ;;    :ANKI_DECK: Computing
 ;;    :ANKI_NOTE_TYPE: Basic
 ;;    :END:
 ;;  ** Front
-;;     How to hello world in elisp ?
+;;     How to say "hello world" in elisp?
 ;;  ** Back
 ;;     #+BEGIN_SRC emacs-lisp
 ;;       (message "Hello, world!")
@@ -32,13 +30,13 @@
 ;;
 ;;  This package extends Org-mode's built-in HTML backend to generate
 ;;  HTML for contents of note fields with specific syntax (e.g. latex)
-;;  translated to Anki style, then save the note to Anki.
+;;  translated to Anki style.
 ;;
 ;;  For this package to work, you have to setup these external dependencies:
 ;;  - curl
-;;  - AnkiConnect, an Anki addon that runs an HTTP server to expose
-;;                 Anki functions as RESTful APIs, see
-;;                 https://github.com/FooSoft/anki-connect#installation
+;;  - AnkiConnect, an Anki addon that runs an RPC server over HTTP to expose
+;;                 Anki functions as APIs,
+;;                 see https://github.com/FooSoft/anki-connect#installation
 ;;                 for installation instructions
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -97,12 +95,15 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 
 (defcustom anki-editor-protected-tags
   '("marked" "leech")
-  "A list of tags that won't be deleted from Anki even though they're absent in Org entries, such as special tags `marked', `leech'."
+  "A list of tags that won't be deleted from Anki even though
+they're absent in Org entries, such as special tags `marked',
+`leech'."
   :type '(repeat string))
 
 (defcustom anki-editor-ignored-org-tags
   (append org-export-select-tags org-export-exclude-tags)
-  "A list of Org tags that are ignored when constructing notes form entries."
+  "A list of Org tags that are ignored when constructing notes
+form entries."
   :type '(repeat string))
 
 (defcustom anki-editor-anki-connect-listening-address
@@ -142,31 +143,23 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
         (request-backend 'curl)
         (json-array-type 'list)
         reply err)
-
-    (let ((response (request (format "http://%s:%s"
-                                     anki-editor-anki-connect-listening-address
-                                     anki-editor-anki-connect-listening-port)
-                             :type "POST"
-                             :parser 'json-read
-                             :data request-body
-                             :success (cl-function (lambda (&key data &allow-other-keys)
-                                                     (setq reply data)))
-                             :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
-                                                   (setq err (string-trim (cdr error-thrown)))))
-                             :sync t)))
-
-      ;; HACK: With sync set to t, `request' waits for curl process to
-      ;; exit, then response data becomes available, but callbacks
-      ;; might not be called right away but at a later time, that's
-      ;; why here we manually invoke callbacks to receive the result.
-      (unless (request-response-done-p response)
-        (request--curl-callback (get-buffer-process (request-response--buffer response)) "finished\n")))
-
+    (request (format "http://%s:%s"
+                     anki-editor-anki-connect-listening-address
+                     anki-editor-anki-connect-listening-port)
+             :type "POST"
+             :parser 'json-read
+             :data request-body
+             :success (cl-function (lambda (&key data &allow-other-keys)
+                                     (setq reply data)))
+             :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
+                                   (setq err (string-trim (cdr error-thrown)))))
+             :sync t)
     (when err (error "Error communicating with AnkiConnect using cURL: %s" err))
     (or reply (error "Got empty reply from AnkiConnect"))))
 
 (defmacro anki-editor--anki-connect-invoke-result (&rest args)
-  "Invoke AnkiConnect with ARGS, return the result from response or raise an error."
+  "Invoke AnkiConnect with ARGS, return the result from response
+or raise an error."
   `(let-alist (anki-editor--anki-connect-invoke ,@args)
      (when .error (error .error))
      .result))
@@ -380,7 +373,8 @@ The implementation is borrowed and simplified from ox-html."
 ;;; Core Functions
 
 (defun anki-editor-map-note-entries (func &optional match scope &rest skip)
-  "Simple wrapper that calls `org-map-entries' with `&ANKI_NOTE_TYPE<>\"\"' appended to MATCH."
+  "Simple wrapper that calls `org-map-entries' with
+  `&ANKI_NOTE_TYPE<>\"\"' appended to MATCH."
   ;; disable property inheritance temporarily, or all subheadings of a
   ;; note heading will be counted as note headings as well
   (let ((org-use-property-inheritance nil))
@@ -391,7 +385,6 @@ The implementation is borrowed and simplified from ox-html."
 Where the subtree is created depends on PREFIX."
   (org-insert-heading prefix)
   (insert heading)
-
   (unless (save-excursion
             (org-up-heading-safe)
             ;; don't insert `ANKI_DECK' if some ancestor already has
@@ -399,9 +392,7 @@ Where the subtree is created depends on PREFIX."
             (and (not (string-blank-p deck))
                  (string= deck (org-entry-get-with-inheritance anki-editor-prop-deck))))
     (org-set-property anki-editor-prop-deck deck))
-
   (org-set-property anki-editor-prop-note-type note-type)
-
   (dolist (field fields)
     (save-excursion
       (org-insert-heading-respect-content)
@@ -426,12 +417,10 @@ Where the subtree is created depends on PREFIX."
       (funcall queue
                'createDeck
                `((deck . ,(alist-get 'deck note)))))
-
     (funcall queue
              'addNote
              `((note . ,(anki-editor--anki-connect-map-note note)))
              #'anki-editor--set-note-id)
-
     (funcall queue)))
 
 (defun anki-editor--update-note (note)
@@ -440,7 +429,6 @@ Where the subtree is created depends on PREFIX."
     (funcall queue
              'updateNoteFields
              `((note . ,(anki-editor--anki-connect-map-note note))))
-
     (funcall queue
              'notesInfo
              `((notes . (,(alist-get 'note-id note))))
@@ -454,19 +442,15 @@ Where the subtree is created depends on PREFIX."
                                                                 (alist-get 'tags note))
                                                    anki-editor-protected-tags))
                       (tag-queue (anki-editor--anki-connect-invoke-queue)))
-
                  (when tags-to-add
                    (funcall tag-queue
                             'addTags `((notes . (,(alist-get 'note-id note)))
                                        (tags . ,(mapconcat #'identity tags-to-add " ")))))
-
                  (when tags-to-remove
                    (funcall tag-queue
                             'removeTags `((notes . (,(alist-get 'note-id note)))
                                           (tags . ,(mapconcat #'identity tags-to-remove " ")))))
-
                  (funcall tag-queue))))
-
     (funcall queue)))
 
 (defun anki-editor--set-failure-reason (reason)
@@ -638,7 +622,7 @@ name and the cdr of which is field content."
 ;;; Commands
 
 (defun anki-editor-push-notes (&optional scope match)
-  "Build notes from headings that can be matched by MATCH within SCOPE and push them to Anki.
+  "Build notes from headings that match MATCH within SCOPE and push them to Anki.
 
 The default search condition `&ANKI_NOTE_TYPE<>\"\"' will always
 be appended to MATCH.
