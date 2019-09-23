@@ -1,6 +1,6 @@
 ;;; anki-editor.el --- Minor mode for making Anki cards with Org  -*- lexical-binding: t; -*-
 ;;
-;; Copyright (C) 2018 Lei Tan <louietanlei@gmail.com>
+;; Copyright (C) 2018-2019 Lei Tan <louietanlei[at]gmail[dot]com>
 ;;
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Lei Tan
@@ -76,6 +76,7 @@
 (defconst anki-editor-prop-failure-reason "ANKI_FAILURE_REASON")
 (defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
 (defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
+(defconst anki-editor-ankiconnect-version 5)
 
 (defgroup anki-editor nil
   "Customizations for anki-editor."
@@ -136,7 +137,8 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
 
 (defun anki-editor--anki-connect-invoke (action &optional params)
   "Invoke AnkiConnect with ACTION and PARAMS."
-  (let ((request-body (json-encode (anki-editor--anki-connect-action action params 5)))
+  (let ((request-body (json-encode
+                       (anki-editor--anki-connect-action action params anki-editor-ankiconnect-version)))
         (request-backend 'curl)
         (json-array-type 'list)
         reply err)
@@ -170,6 +172,7 @@ See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
      .result))
 
 (defun anki-editor--anki-connect-invoke-multi (&rest actions)
+  "Invoke AnkiConnect with ACTIONS, a list of (action . result-handler) pairs."
   (-zip-with (lambda (result handler)
                (when-let ((_ (listp result))
                           (err (alist-get 'error result)))
@@ -203,7 +206,7 @@ The result is the path to the newly stored media file."
     (when (equal :json-false (anki-editor--anki-connect-invoke-result
                               "retrieveMediaFile"
                               `((filename . ,media-file-name))))
-      (message "Storing media file to Anki for %s..." path)
+      (message "Storing media file %s to Anki, this might take a while" path)
       (setq content (base64-encode-string
 		     (with-temp-buffer
 		       (insert-file-contents path)
@@ -433,7 +436,6 @@ Where the subtree is created depends on PREFIX."
 
 (defun anki-editor--update-note (note)
   "Request AnkiConnect for updating fields and tags of NOTE."
-
   (let ((queue (anki-editor--anki-connect-invoke-queue)))
     (funcall queue
              'updateNoteFields
@@ -550,7 +552,9 @@ Where the subtree is created depends on PREFIX."
     (mapcar #'org-entry-restore-space values)))
 
 (defun anki-editor--build-fields ()
-  "Build a list of fields from subheadings of current heading, each element of which is a cons cell, the car of which is field name and the cdr of which is field content."
+  "Build a list of fields from subheadings of current heading,
+each element of which is a cons cell, the car of which is field
+name and the cdr of which is field content."
   (save-excursion
     (let (fields
           (point-of-last-child (point)))
@@ -620,6 +624,7 @@ Where the subtree is created depends on PREFIX."
 
 (defun anki-editor-setup-minor-mode ()
   "Set up this minor mode."
+  (anki-editor-anki-connect-check)
   (add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property nil t)
   (advice-add 'org-set-tags :before #'anki-editor--before-set-tags)
   (advice-add 'org-get-buffer-tags :around #'anki-editor--get-buffer-tags)
@@ -632,7 +637,7 @@ Where the subtree is created depends on PREFIX."
 
 ;;; Commands
 
-(defun anki-editor-push-notes (&optional arg match scope)
+(defun anki-editor-push-notes (&optional scope match)
   "Build notes from headings that can be matched by MATCH within SCOPE and push them to Anki.
 
 The default search condition `&ANKI_NOTE_TYPE<>\"\"' will always
@@ -654,21 +659,18 @@ See doc string of `org-map-entries' for what these different options mean.
 
 If one fails, the failure reason will be set in property drawer
 of that heading."
-  (interactive "P")
+  (interactive (list (cond
+                      ((region-active-p) 'region)
+                      ((equal current-prefix-arg '(4)) 'tree)
+                      ((equal current-prefix-arg '(16)) 'file)
+                      ((equal current-prefix-arg '(64)) 'agenda)
+                      (t nil))))
 
-  (unless scope
-    (setq scope (cond
-                 ((region-active-p) 'region)
-                 ((equal arg '(4)) 'tree)
-                 ((equal arg '(16)) 'file)
-                 ((equal arg '(64)) 'agenda)
-                 (t nil))))
-
-  (let* ((total (progn
-                  (message "Counting notes...")
-                  (length (anki-editor-map-note-entries t match scope))))
-         (acc 0)
-         (failed 0))
+  (let ((total (progn
+                 (message "Counting notes...")
+                 (length (anki-editor-map-note-entries t match scope))))
+        (acc 0)
+        (failed 0))
     (anki-editor-map-note-entries
      (lambda ()
        (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
@@ -678,20 +680,39 @@ of that heading."
            (anki-editor--push-note (anki-editor-note-at-point))
          (error (cl-incf failed)
                 (anki-editor--set-failure-reason (error-message-string err)))))
-     match
-     scope)
+     match scope)
 
-    (message (if (= 0 failed)
-                 (format "Successfully pushed %d notes to Anki." acc)
-               (format "Pushed %d notes, %d of which are failed. Check property drawers for failure reasons. Once you've fixed the issues, you could use `anki-editor-retry-failure-notes' to re-push the failed notes."
-                       acc failed)))))
+    (message
+     (cond
+      ((zerop total) "Nothing to push")
+      ((zerop failed) (format "Pushed %d notes to Anki successfully" acc))
+      (t (format "Pushed %d notes in total, among which %d were failed.  Check property drawers for failure reasons.
+When the issues are resolved, you could repush the failed ones with `anki-editor-retry-failed-notes'."
+                 acc failed))))))
 
-(defun anki-editor-retry-failure-notes (&optional arg scope)
-  "Retry pushing notes that were failed.
+(defun anki-editor-push-new-notes (&optional scope)
+  "Push note entries without ANKI_NOTE_ID in SCOPE to Anki."
+  (interactive)
+  (anki-editor-push-notes scope (concat anki-editor-prop-note-id "=\"\"")))
+
+(defun anki-editor-retry-failed-notes (&optional scope)
+  "Retry pushing notes marked as failed.
 This command just calls `anki-editor-submit' with match string
 matching non-empty `ANKI_FAILURE_REASON' properties."
-  (interactive "P")
-  (anki-editor-push-notes arg (concat anki-editor-prop-failure-reason "<>\"\"") scope))
+  (interactive)
+  (anki-editor-push-notes scope (concat anki-editor-prop-failure-reason "<>\"\"")))
+
+(defun anki-editor-delete-notes (noteids)
+  "Delete notes in NOTEIDS or the note at point."
+  (interactive (list (list (org-entry-get nil anki-editor-prop-note-id))))
+  (when (or (not (called-interactively-p 'interactive))
+            (yes-or-no-p (format "Do you really want to delete note %s? The deletion can't be undone. " (nth 0 noteids))))
+    (anki-editor--anki-connect-invoke-result
+     "deleteNotes"
+     `((notes . ,noteids)))
+    (org-entry-delete nil anki-editor-prop-note-id)
+    (when (called-interactively-p 'interactive)
+      (message "Deleted note %s" (nth 0 noteids)))))
 
 (defun anki-editor-insert-note (&optional prefix)
   "Insert a note interactively.
@@ -757,6 +778,19 @@ same as how it is used by `M-RET'(org-insert-heading)."
   (interactive)
   (org-export-replace-region-by anki-editor--ox-anki-html-backend))
 
+
+;;; More utilities
+
+(defun anki-editor-anki-connect-check ()
+  "Check if correct version of AnkiConnect is serving."
+  (interactive)
+  (let ((ver (anki-editor--anki-connect-invoke-result "version")))
+    (if (<= anki-editor-ankiconnect-version ver)
+        (when (called-interactively-p 'interactive)
+          (message "AnkiConnect v.%d is running" ver))
+      (error "anki-editor requires minimal version %d of AnkiConnect installed"
+             anki-editor-ankiconnect-version))))
+
 (defun anki-editor-anki-connect-upgrade ()
   "Upgrade AnkiConnect to the latest version.
 
@@ -767,11 +801,44 @@ code in the master branch of its Github repo.
 This is useful when new version of this package depends on the
 bugfixes or new features of AnkiConnect."
   (interactive)
-  (when (yes-or-no-p "NOTE: This will download the latest codebase of AnkiConnect to your system, which is not guaranteed to be safe or stable. Generally, you don't need this command, this is useful only when new version of this package requires the updates of AnkiConnect that are not released yet. Do you still want to continue?")
+  (when (yes-or-no-p "This is going to download the latest AnkiConnect from the Internet to your computer, do you want to continue? ")
     (let ((result (anki-editor--anki-connect-invoke-result "upgrade")))
       (when (and (booleanp result) result)
-        (message "AnkiConnect has been upgraded, you might have to restart Anki to make it in effect.")))))
+        (message "AnkiConnect has been upgraded, you might have to restart Anki for the changes to take effect.")))))
 
+(defun anki-editor-sync-collections ()
+  "Synchronizes the local anki collections with ankiweb."
+  (interactive)
+  (anki-editor--anki-connect-invoke "sync"))
+
+(defun anki-editor-gui-browse (&optional query)
+  "Open Anki Browser with QUERY.
+When called interactively, it will try to set QUERY to current
+note or deck."
+  (interactive (list (pcase (org-entry-get-with-inheritance anki-editor-prop-note-id)
+                       ((and (pred stringp) nid) (format "nid:%s" nid))
+                       (_ (format "deck:%s"
+                                  (or (org-entry-get-with-inheritance anki-editor-prop-deck)
+                                      "current"))))))
+  (anki-editor--anki-connect-invoke "guiBrowse" `((query . ,(or query "")))))
+
+(defun anki-editor-gui-add-cards ()
+  "Open Anki Add Cards dialog with presets from current note
+entry."
+  (interactive)
+  (anki-editor--anki-connect-invoke-result
+   "guiAddCards"
+   `((note . ,(cons '(options . ((closeAfterAdding . t)))
+                    (anki-editor--anki-connect-map-note
+                     (anki-editor-note-at-point)))))))
+
+(defun anki-editor-find-notes (&optional query)
+  "Find notes with QUERY."
+  (interactive "sQuery: ")
+  (let ((nids (anki-editor--anki-connect-invoke-result "findNotes" `((query . ,query)))))
+    (if (called-interactively-p 'interactive)
+        (message "%S" nids)
+      nids)))
 
 (provide 'anki-editor)
 
