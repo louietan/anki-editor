@@ -19,6 +19,31 @@
 
    Cards of this note will be created in {{c1::Languages::which deck?}}
 
+* Raw fields
+  :PROPERTIES:
+  :ANKI_NOTE_TYPE: Basic
+  :END:
+
+** Front
+
+   How to send the content of a field or fields to Anki as is?
+
+** Back
+   :PROPERTIES:
+   :ANKI_EXPORTER: raw
+   :END:
+
+   With property <code>:ANKI_EXPORTER: raw</code>, content of the
+   field will be sent to Anki <em>unprocessed</em>.  You can use
+   whatever Anki supports, like HTML tags.
+   <br>
+   <br>
+   This property is retrieved with inheritance, meaning that it can be
+   set in any ancestor entries or at the top of the file with
+   <code>#+PROPERTY: ANKI_EXPORTER raw</code>, it's also possible to
+   override an outer level raw exporter with <code>:ANKI_EXPORTER:
+   default</code>.
+
 * Languages
   :PROPERTIES:
   :ANKI_DECK: Languages
