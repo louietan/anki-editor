@@ -5,13 +5,13 @@
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Lei Tan
 ;; Version: 0.3.3
-;; Package-Requires: ((emacs "25") (request "0.3.0") (dash "2.12.0"))
+;; Package-Requires: ((emacs "25.1") (request "0.3.0"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Commentary:
-;; 
+;;
 ;;  This package is for users of both Emacs and Anki, who'd like to
 ;;  make Anki cards in Org mode.  With this package, Anki cards can be
 ;;  made from an Org buffer like below: (inspired by org-drill)
@@ -59,7 +59,6 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'dash)
 (require 'json)
 (require 'org-element)
 (require 'ox)
@@ -87,10 +86,6 @@
   nil
   "If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze.
 See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
-
-(defcustom anki-editor-create-decks
-  nil
-  "If non-nil, creates deck before creating a note.")
 
 (defcustom anki-editor-org-tags-as-anki-tags
   t
@@ -120,16 +115,8 @@ form entries."
 (defcustom anki-editor-use-math-jax nil
   "Use Anki's built in MathJax support instead of LaTeX.")
 
-;;; AnkiConnect
 
-(defun anki-editor--anki-connect-invoke-queue ()
-  (let (action-queue)
-    (lambda (&optional action params handler)
-      (if action
-          (push (cons (anki-editor--anki-connect-action action params) handler) action-queue)
-        (when action-queue
-          (apply #'anki-editor--anki-connect-invoke-multi (nreverse action-queue))
-          (setq action-queue nil))))))
+;;; AnkiConnect
 
 (defun anki-editor-api-call (action &rest params)
   "Invoke AnkiConnect with ACTION and PARAMS."
@@ -162,28 +149,48 @@ or raise an error."
     (when .error (error .error))
     .result))
 
-(defun anki-editor--anki-connect-invoke-multi (&rest actions)
-  "Invoke AnkiConnect with ACTIONS, a list of (action . result-handler) pairs."
-  (-zip-with (lambda (result handler)
-               (when-let ((_ (listp result))
-                          (err (alist-get 'error result)))
-                 (error err))
-               (and handler (funcall handler result)))
-             (anki-editor--anki-connect-invoke-result
-              "multi" `((actions . ,(mapcar #'car actions))))
-             (mapcar #'cdr actions)))
+(defmacro anki-editor-api-with-multi (&rest body)
+  "Use in combination with `anki-editor-api-enqueue' to combine
+multiple api calls into a single 'multi' call, return the results
+of these calls in the same order."
+  `(let (--anki-editor-var-multi-actions--
+         --anki-editor-var-multi-results--)
+     ,@body
+     (setq --anki-editor-var-multi-results--
+           (anki-editor-api-call-result
+            'multi
+            :actions (nreverse
+                      ;; Here we make a vector from the action list,
+                      ;; or `json-encode' will consider it as an association list.
+                      (vconcat
+                       --anki-editor-var-multi-actions--))))
+     (cl-loop for result in --anki-editor-var-multi-results--
+              do (when-let ((_ (listp result))
+                            (err (alist-get 'error result)))
+                   (error err))
+              collect result)))
 
-(defun anki-editor--anki-connect-map-note (note)
+(defmacro anki-editor-api-enqueue (action &rest params)
+  "Like `anki-editor-api-call', but is only used in combination
+with `anki-editor-api-with-multi'.  Instead of sending the
+request directly, it simply queues the request."
+  `(let ((action (list :action ,action))
+         (params (list ,@params)))
+     (when params
+       (plist-put action :params params))
+     (push action --anki-editor-var-multi-actions--)))
+
+(defun anki-editor-api--note (note)
   "Convert NOTE to the form that AnkiConnect accepts."
-  (let-alist note
-    (list (cons "id" .note-id)
-          (cons "deckName" .deck)
-          (cons "modelName" .note-type)
-          (cons "fields" .fields)
-          ;; Convert tags to a vector since empty list is identical to nil
-          ;; which will become None in Python, but AnkiConnect requires it
-          ;; to be type of list.
-          (cons "tags" (vconcat .tags)))))
+  (list
+   :id (string-to-number (or (anki-editor-note-id note) "0"))
+   :deckName (anki-editor-note-deck note)
+   :modelName (anki-editor-note-model note)
+   :fields (anki-editor-note-fields note)
+   ;; Convert tags to a vector since empty list is identical to nil
+   ;; which will become None in Python, but AnkiConnect requires it
+   ;; to be type of list.
+   :tags (vconcat (anki-editor-note-tags note))))
 
 (defun anki-editor-api--store-media-file (path)
   "Store media file for PATH, which is an absolute file name.
@@ -367,6 +374,9 @@ The implementation is borrowed and simplified from ox-html."
 
 ;;; Core Functions
 
+(cl-defstruct anki-editor-note
+  id model deck fields tags)
+
 (defun anki-editor-map-note-entries (func &optional match scope &rest skip)
   "Simple wrapper that calls `org-map-entries' with
   `&ANKI_NOTE_TYPE<>\"\"' appended to MATCH."
@@ -396,9 +406,11 @@ Where the subtree is created depends on PREFIX."
 
 (defun anki-editor--push-note (note)
   "Request AnkiConnect for updating or creating NOTE."
-  (if (= (alist-get 'note-id note) -1)
-      (anki-editor--create-note note)
-    (anki-editor--update-note note)))
+  (cond
+   ((null (anki-editor-note-id note))
+    (anki-editor--create-note note))
+   (t
+    (anki-editor--update-note note))))
 
 (defun anki-editor--set-note-id (id)
   (unless id
@@ -407,46 +419,37 @@ Where the subtree is created depends on PREFIX."
 
 (defun anki-editor--create-note (note)
   "Request AnkiConnect for creating NOTE."
-  (let ((queue (anki-editor--anki-connect-invoke-queue)))
-    (when anki-editor-create-decks
-      (funcall queue
-               'createDeck
-               `((deck . ,(alist-get 'deck note)))))
-    (funcall queue
-             'addNote
-             `((note . ,(anki-editor--anki-connect-map-note note)))
-             #'anki-editor--set-note-id)
-    (funcall queue)))
+  (thread-last
+      (anki-editor-api-with-multi
+       (anki-editor-api-enqueue 'createDeck
+                                :deck (anki-editor-note-deck note))
+       (anki-editor-api-enqueue 'addNote
+                                :note (anki-editor-api--note note)))
+    (nth 1)
+    (anki-editor--set-note-id)))
 
 (defun anki-editor--update-note (note)
   "Request AnkiConnect for updating fields and tags of NOTE."
-  (let ((queue (anki-editor--anki-connect-invoke-queue)))
-    (funcall queue
-             'updateNoteFields
-             `((note . ,(anki-editor--anki-connect-map-note note))))
-    (funcall queue
-             'notesInfo
-             `((notes . (,(alist-get 'note-id note))))
-             (lambda (result)
-               ;; update tags
-               (let* ((existing-note (car result))
-                      (tags-to-add (-difference (-difference (alist-get 'tags note)
-                                                             (alist-get 'tags existing-note))
-                                                anki-editor-ignored-org-tags))
-                      (tags-to-remove (-difference (-difference (alist-get 'tags existing-note)
-                                                                (alist-get 'tags note))
-                                                   anki-editor-protected-tags))
-                      (tag-queue (anki-editor--anki-connect-invoke-queue)))
-                 (when tags-to-add
-                   (funcall tag-queue
-                            'addTags `((notes . (,(alist-get 'note-id note)))
-                                       (tags . ,(mapconcat #'identity tags-to-add " ")))))
-                 (when tags-to-remove
-                   (funcall tag-queue
-                            'removeTags `((notes . (,(alist-get 'note-id note)))
-                                          (tags . ,(mapconcat #'identity tags-to-remove " ")))))
-                 (funcall tag-queue))))
-    (funcall queue)))
+  (let* ((oldnote (caar (anki-editor-api-with-multi
+                         (anki-editor-api-enqueue 'notesInfo
+                                                  :notes (list (anki-editor-note-id note)))
+                         (anki-editor-api-enqueue 'updateNoteFields
+                                                  :note (anki-editor-api--note note)))))
+         (tagsadd (cl-set-difference (anki-editor-note-tags note)
+                                     (alist-get 'tags oldnote)
+                                     :test 'string=))
+         (tagsdel (thread-first (alist-get 'tags oldnote)
+                    (cl-set-difference (anki-editor-note-tags note) :test 'string=)
+                    (cl-set-difference anki-editor-protected-tags :test 'string=))))
+    (anki-editor-api-with-multi
+     (when tagsadd
+       (anki-editor-api-enqueue 'addTags
+                                :notes (list (anki-editor-note-id note))
+                                :tags (mapconcat #'identity tagsadd " ")))
+     (when tagsdel
+       (anki-editor-api-enqueue 'removeTags
+                                :notes (list (anki-editor-note-id note))
+                                :tags (mapconcat #'identity tagsdel " "))))))
 
 (defun anki-editor--set-failure-reason (reason)
   "Set failure reason to REASON in property drawer at point."
@@ -485,7 +488,7 @@ Where the subtree is created depends on PREFIX."
   (when (and (anki-editor--enable-tag-completion)
              (not just-align))
     (setq anki-editor--anki-tags-cache (anki-editor-all-tags))
-    (unless (-all? #'anki-editor-is-valid-org-tag anki-editor--anki-tags-cache)
+    (when (cl-notevery #'anki-editor-is-valid-org-tag anki-editor--anki-tags-cache)
       (warn "Some tags from Anki contain characters that are not valid in Org tags."))))
 
 (defun anki-editor--get-buffer-tags (oldfun)
@@ -499,30 +502,32 @@ Where the subtree is created depends on PREFIX."
   (anki-editor-api-call-result 'modelNames))
 
 (defun anki-editor-note-at-point ()
-  "Construct an alist representing a note from current entry."
+  "Make a note struct from current entry."
   (let ((org-trust-scanner-tags t)
         (deck (org-entry-get-with-inheritance anki-editor-prop-deck))
         (note-id (org-entry-get nil anki-editor-prop-note-id))
         (note-type (org-entry-get nil anki-editor-prop-note-type))
-        (tags (anki-editor--get-tags))
+        (tags (cl-set-difference (anki-editor--get-tags)
+                                 anki-editor-ignored-org-tags
+                                 :test 'string=))
         (fields (anki-editor--build-fields)))
 
     (unless deck (error "No deck specified"))
     (unless note-type (error "Missing note type"))
     (unless fields (error "Missing fields"))
 
-    `((deck . ,deck)
-      (note-id . ,(string-to-number (or note-id "-1")))
-      (note-type . ,note-type)
-      (tags . ,tags)
-      (fields . ,fields))))
+    (make-anki-editor-note :id note-id
+                           :model note-type
+                           :deck deck
+                           :tags tags
+                           :fields fields)))
 
 (defun anki-editor--get-tags ()
   (let ((tags (anki-editor--entry-get-multivalued-property-with-inheritance
                nil
                anki-editor-prop-tags)))
     (if anki-editor-org-tags-as-anki-tags
-        (append tags (org-get-tags-at))
+        (append tags (org-get-tags))
       tags)))
 
 (defun anki-editor--entry-get-multivalued-property-with-inheritance (pom property)
@@ -601,7 +606,10 @@ name and the cdr of which is field content."
 (defun anki-editor--concat-multivalued-property-value (prop value)
   (let ((old-values (org-entry-get-multivalued-property nil prop)))
     (unless (string-suffix-p prop "+")
-      (setq old-values (-difference old-values (org-entry-get-multivalued-property nil (concat prop "+")))))
+      (setq old-values (cl-set-difference old-values
+                                          (org-entry-get-multivalued-property
+                                           nil (concat prop "+"))
+                                          :test 'string=)))
     (mapconcat #'org-entry-protect-space
                (append old-values (list value))
                " ")))
@@ -827,15 +835,16 @@ note or deck."
 entry."
   (interactive)
   (anki-editor-api-call-result 'guiAddCards
-                               :note `((:options (:closeAfterAdding t))
-                                       ,(anki-editor--api-note
-                                         (anki-editor-note-at-point)))))
+                               :note (append
+                                      (anki-editor-api--note
+                                       (anki-editor-note-at-point))
+                                      (list :options '(:closeAfterAdding t)))))
 
 (defun anki-editor-find-notes (&optional query)
   "Find notes with QUERY."
   (interactive "sQuery: ")
   (let ((nids (anki-editor-api-call-result 'findNotes
-                                           :query query)))
+                                           :query (or query ""))))
     (if (called-interactively-p 'interactive)
         (message "%S" nids)
       nids)))
