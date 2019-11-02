@@ -77,7 +77,7 @@
 (defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
 (defconst anki-editor-exporter-raw "raw")
 (defconst anki-editor-exporter-default "default")
-(defconst anki-editor-ankiconnect-version 5)
+(defconst anki-editor-api-version 5)
 
 (defgroup anki-editor nil
   "Customizations for anki-editor."
@@ -109,11 +109,11 @@ they're absent in Org entries, such as special tags `marked',
 form entries."
   :type '(repeat string))
 
-(defcustom anki-editor-anki-connect-listening-address
+(defcustom anki-editor-api-host
   "127.0.0.1"
   "The network address AnkiConnect is listening.")
 
-(defcustom anki-editor-anki-connect-listening-port
+(defcustom anki-editor-api-port
   "8765"
   "The port number AnkiConnect is listening.")
 
@@ -121,14 +121,6 @@ form entries."
   "Use Anki's built in MathJax support instead of LaTeX.")
 
 ;;; AnkiConnect
-
-(defun anki-editor--anki-connect-action (action &optional params version)
-  (let (a)
-    (when version
-      (push `(version . ,version) a))
-    (when params
-      (push `(params . ,params) a))
-    (push `(action . ,action) a)))
 
 (defun anki-editor--anki-connect-invoke-queue ()
   (let (action-queue)
@@ -139,19 +131,22 @@ form entries."
           (apply #'anki-editor--anki-connect-invoke-multi (nreverse action-queue))
           (setq action-queue nil))))))
 
-(defun anki-editor--anki-connect-invoke (action &optional params)
+(defun anki-editor-api-call (action &rest params)
   "Invoke AnkiConnect with ACTION and PARAMS."
-  (let ((request-body (json-encode
-                       (anki-editor--anki-connect-action action params anki-editor-ankiconnect-version)))
+  (let ((payload (list :action action :version anki-editor-api-version))
         (request-backend 'curl)
         (json-array-type 'list)
         reply err)
+
+    (when params
+      (plist-put payload :params params))
+
     (request (format "http://%s:%s"
-                     anki-editor-anki-connect-listening-address
-                     anki-editor-anki-connect-listening-port)
+                     anki-editor-api-host
+                     anki-editor-api-port)
              :type "POST"
              :parser 'json-read
-             :data request-body
+             :data (json-encode payload)
              :success (cl-function (lambda (&key data &allow-other-keys)
                                      (setq reply data)))
              :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
@@ -160,12 +155,12 @@ form entries."
     (when err (error "Error communicating with AnkiConnect using cURL: %s" err))
     (or reply (error "Got empty reply from AnkiConnect"))))
 
-(defmacro anki-editor--anki-connect-invoke-result (&rest args)
+(defun anki-editor-api-call-result (&rest args)
   "Invoke AnkiConnect with ARGS, return the result from response
 or raise an error."
-  `(let-alist (anki-editor--anki-connect-invoke ,@args)
-     (when .error (error .error))
-     .result))
+  (let-alist (apply #'anki-editor-api-call args)
+    (when .error (error .error))
+    .result))
 
 (defun anki-editor--anki-connect-invoke-multi (&rest actions)
   "Invoke AnkiConnect with ACTIONS, a list of (action . result-handler) pairs."
@@ -190,7 +185,7 @@ or raise an error."
           ;; to be type of list.
           (cons "tags" (vconcat .tags)))))
 
-(defun anki-editor--anki-connect-store-media-file (path)
+(defun anki-editor-api--store-media-file (path)
   "Store media file for PATH, which is an absolute file name.
 The result is the path to the newly stored media file."
   (let* ((bytes (with-temp-buffer
@@ -200,17 +195,14 @@ The result is the path to the newly stored media file."
          (media-file-name (format "%s-%s%s"
                                   (file-name-base path)
                                   hash
-                                  (file-name-extension path t)))
-         content)
-    (when (equal :json-false (anki-editor--anki-connect-invoke-result
-                              "retrieveMediaFile"
-                              `((filename . ,media-file-name))))
+                                  (file-name-extension path t))))
+    (when (eq :json-false
+              (anki-editor-api-call-result 'retrieveMediaFile
+                                           :filename media-file-name))
       (message "Storing media file %s to Anki, this might take a while" path)
-      (setq content (base64-encode-string bytes))
-      (anki-editor--anki-connect-invoke-result
-       "storeMediaFile"
-       `((filename . ,media-file-name)
-         (data . ,content))))
+      (anki-editor-api-call-result 'storeMediaFile
+                                   :filename media-file-name
+                                   :data (base64-encode-string bytes)))
     media-file-name))
 
 
@@ -331,7 +323,7 @@ The implementation is borrowed and simplified from ox-html."
                                (file-name-absolute-p raw-path))
                       (setq raw-path (concat (file-name-as-directory home) raw-path)))
                     ;; storing file to Anki and return the modified path
-                    (anki-editor--anki-connect-store-media-file (expand-file-name (url-unhex-string raw-path)))))
+                    (anki-editor-api--store-media-file (expand-file-name (url-unhex-string raw-path)))))
                  (t (throw 'giveup nil))))
                (attributes-plist
                 (let* ((parent (org-export-get-parent-element link))
@@ -354,7 +346,7 @@ The implementation is borrowed and simplified from ox-html."
 
            ;; Audio file.
            ((string-suffix-p ".mp3" path t)
-              (format "[sound:%s]" path))
+            (format "[sound:%s]" path))
 
            ;; External link with a description part.
            ((and path desc) (format "<a href=\"%s\"%s>%s</a>"
@@ -479,11 +471,11 @@ Where the subtree is created depends on PREFIX."
 
 (defun anki-editor-all-tags ()
   "Get all tags from Anki."
-  (anki-editor--anki-connect-invoke-result "getTags"))
+  (anki-editor-api-call-result 'getTags))
 
 (defun anki-editor-deck-names ()
   "Get all decks names from Anki."
-  (anki-editor--anki-connect-invoke-result "deckNames"))
+  (anki-editor-api-call-result 'deckNames))
 
 (defun anki-editor--enable-tag-completion ()
   (and anki-editor-mode anki-editor-org-tags-as-anki-tags))
@@ -504,7 +496,7 @@ Where the subtree is created depends on PREFIX."
 
 (defun anki-editor-note-types ()
   "Get note types from Anki."
-  (anki-editor--anki-connect-invoke-result "modelNames"))
+  (anki-editor-api-call-result 'modelNames))
 
 (defun anki-editor-note-at-point ()
   "Construct an alist representing a note from current entry."
@@ -632,7 +624,7 @@ name and the cdr of which is field content."
 
 (defun anki-editor-setup-minor-mode ()
   "Set up this minor mode."
-  (anki-editor-anki-connect-check)
+  (anki-editor-api-check)
   (add-hook 'org-property-allowed-value-functions #'anki-editor--get-allowed-values-for-property nil t)
   (advice-add 'org-set-tags :before #'anki-editor--before-set-tags)
   (advice-add 'org-get-buffer-tags :around #'anki-editor--get-buffer-tags)
@@ -715,9 +707,8 @@ matching non-empty `ANKI_FAILURE_REASON' properties."
   (interactive (list (list (org-entry-get nil anki-editor-prop-note-id))))
   (when (or (not (called-interactively-p 'interactive))
             (yes-or-no-p (format "Do you really want to delete note %s? The deletion can't be undone. " (nth 0 noteids))))
-    (anki-editor--anki-connect-invoke-result
-     "deleteNotes"
-     `((notes . ,noteids)))
+    (anki-editor-api-call-result 'deleteNotes
+                                 :notes noteids)
     (org-entry-delete nil anki-editor-prop-note-id)
     (when (called-interactively-p 'interactive)
       (message "Deleted note %s" (nth 0 noteids)))))
@@ -738,7 +729,8 @@ same as how it is used by `M-RET'(org-insert-heading)."
                                      (sort (anki-editor-note-types) #'string-lessp)))
          (fields (progn
                    (message "Fetching note fields...")
-                   (anki-editor--anki-connect-invoke-result "modelFieldNames" `((modelName . ,note-type)))))
+                   (anki-editor-api-call-result 'modelFieldNames
+                                                :modelName note-type)))
          (note-heading (read-from-minibuffer "Enter the note heading (optional): ")))
 
     (anki-editor--insert-note-skeleton prefix
@@ -789,17 +781,17 @@ same as how it is used by `M-RET'(org-insert-heading)."
 
 ;;; More utilities
 
-(defun anki-editor-anki-connect-check ()
+(defun anki-editor-api-check ()
   "Check if correct version of AnkiConnect is serving."
   (interactive)
-  (let ((ver (anki-editor--anki-connect-invoke-result "version")))
-    (if (<= anki-editor-ankiconnect-version ver)
+  (let ((ver (anki-editor-api-call-result 'version)))
+    (if (<= anki-editor-api-version ver)
         (when (called-interactively-p 'interactive)
           (message "AnkiConnect v.%d is running" ver))
       (error "anki-editor requires minimal version %d of AnkiConnect installed"
-             anki-editor-ankiconnect-version))))
+             anki-editor-api-version))))
 
-(defun anki-editor-anki-connect-upgrade ()
+(defun anki-editor-api-upgrade ()
   "Upgrade AnkiConnect to the latest version.
 
 This will display a confirmation dialog box in Anki asking if you
@@ -810,14 +802,14 @@ This is useful when new version of this package depends on the
 bugfixes or new features of AnkiConnect."
   (interactive)
   (when (yes-or-no-p "This is going to download the latest AnkiConnect from the Internet to your computer, do you want to continue? ")
-    (let ((result (anki-editor--anki-connect-invoke-result "upgrade")))
+    (let ((result (anki-editor-api-call-result 'upgrade)))
       (when (and (booleanp result) result)
         (message "AnkiConnect has been upgraded, you might have to restart Anki for the changes to take effect.")))))
 
 (defun anki-editor-sync-collections ()
   "Synchronizes the local anki collections with ankiweb."
   (interactive)
-  (anki-editor--anki-connect-invoke "sync"))
+  (anki-editor-api-call-result 'sync))
 
 (defun anki-editor-gui-browse (&optional query)
   "Open Anki Browser with QUERY.
@@ -828,22 +820,22 @@ note or deck."
                        (_ (format "deck:%s"
                                   (or (org-entry-get-with-inheritance anki-editor-prop-deck)
                                       "current"))))))
-  (anki-editor--anki-connect-invoke "guiBrowse" `((query . ,(or query "")))))
+  (anki-editor-api-call 'guiBrowse :query (or query "")))
 
 (defun anki-editor-gui-add-cards ()
   "Open Anki Add Cards dialog with presets from current note
 entry."
   (interactive)
-  (anki-editor--anki-connect-invoke-result
-   "guiAddCards"
-   `((note . ,(cons '(options . ((closeAfterAdding . t)))
-                    (anki-editor--anki-connect-map-note
-                     (anki-editor-note-at-point)))))))
+  (anki-editor-api-call-result 'guiAddCards
+                               :note `((:options (:closeAfterAdding t))
+                                       ,(anki-editor--api-note
+                                         (anki-editor-note-at-point)))))
 
 (defun anki-editor-find-notes (&optional query)
   "Find notes with QUERY."
   (interactive "sQuery: ")
-  (let ((nids (anki-editor--anki-connect-invoke-result "findNotes" `((query . ,query)))))
+  (let ((nids (anki-editor-api-call-result 'findNotes
+                                           :query query)))
     (if (called-interactively-p 'interactive)
         (message "%S" nids)
       nids)))
