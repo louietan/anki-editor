@@ -193,7 +193,10 @@ or raise an error."
 (defun anki-editor--anki-connect-store-media-file (path)
   "Store media file for PATH, which is an absolute file name.
 The result is the path to the newly stored media file."
-  (let* ((hash (secure-hash 'sha1 path))
+  (let* ((bytes (with-temp-buffer
+                  (insert-file-contents-literally path)
+                  (buffer-string)))
+         (hash (secure-hash 'sha1 bytes))
          (media-file-name (format "%s-%s%s"
                                   (file-name-base path)
                                   hash
@@ -203,10 +206,7 @@ The result is the path to the newly stored media file."
                               "retrieveMediaFile"
                               `((filename . ,media-file-name))))
       (message "Storing media file %s to Anki, this might take a while" path)
-      (setq content (base64-encode-string
-		     (with-temp-buffer
-		       (insert-file-contents path)
-		       (buffer-string))))
+      (setq content (base64-encode-string bytes))
       (anki-editor--anki-connect-invoke-result
        "storeMediaFile"
        `((filename . ,media-file-name)
