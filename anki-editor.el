@@ -5,7 +5,7 @@
 ;; Description: Make Anki Cards in Org-mode
 ;; Author: Lei Tan
 ;; Version: 0.3.3
-;; Package-Requires: ((emacs "25.1") (request "0.3.0"))
+;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/louietan/anki-editor
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -63,7 +63,6 @@
 (require 'org-element)
 (require 'ox)
 (require 'ox-html)
-(require 'request)
 (require 'seq)
 
 (defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
@@ -119,6 +118,40 @@ form entries."
 
 ;;; AnkiConnect
 
+(cl-defun anki-editor--http-send (url
+                                  &rest settings
+                                  &key type data success error parser
+                                  &allow-other-keys)
+  "This is a simplistic little function to make http requests using cURL.
+The api is borrowed from request.el.  It exists because
+request.el's sync mode calls cURL asynchronously under the hood,
+which doesn't work on some machiens (like mine) where the process
+sentinel never gets called.  After some debugging of Emacs, it
+seems that in 'process.c' the pselect syscall to the file
+descriptor of inotify used by 'autorevert' always returns a
+nonzero value and causes 'status_notify' never being called.  To
+determine whether it's a bug in Emacs and make a patch requires
+more digging."
+  (let ((tempfile (make-temp-file "emacs-anki-editor"))
+        (responsebuf (generate-new-buffer " *anki-editor-curl*")))
+    (with-temp-file tempfile
+      (setq buffer-file-coding-system 'utf-8)
+      (set-buffer-multibyte t)
+      (insert data))
+    (unwind-protect
+        (with-current-buffer responsebuf
+          (apply #'call-process "curl" nil t nil (list
+                                                  url
+                                                  "--silent"
+                                                  "-X" type
+                                                  "--data-binary"
+                                                  (concat "@" tempfile)))
+
+          (goto-char (point-min))
+          (apply success (list :data (funcall parser))))
+      (kill-buffer responsebuf)
+      (delete-file tempfile))))
+
 (defun anki-editor-api-call (action &rest params)
   "Invoke AnkiConnect with ACTION and PARAMS."
   (let ((payload (list :action action :version anki-editor-api-version))
@@ -126,17 +159,17 @@ form entries."
         (json-array-type 'list)
         reply err)
     (when params (setq payload (plist-put payload :params params)))
-    (request (format "http://%s:%s"
-                     anki-editor-api-host
-                     anki-editor-api-port)
-             :type "POST"
-             :parser 'json-read
-             :data (json-encode payload)
-             :success (cl-function (lambda (&key data &allow-other-keys)
-                                     (setq reply data)))
-             :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
-                                   (setq err (string-trim (cdr error-thrown)))))
-             :sync t)
+    (anki-editor--http-send (format "http://%s:%s"
+                                    anki-editor-api-host
+                                    anki-editor-api-port)
+                            :type "POST"
+                            :parser 'json-read
+                            :data (json-encode payload)
+                            :success (cl-function (lambda (&key data &allow-other-keys)
+                                                    (setq reply data)))
+                            :error (cl-function (lambda (&key _ &key error-thrown &allow-other-keys)
+                                                  (setq err (string-trim (cdr error-thrown)))))
+                            :sync t)
     (when err (error "Error communicating with AnkiConnect using cURL: %s" err))
     (or reply (error "Got empty reply from AnkiConnect"))))
 
