@@ -65,19 +65,6 @@
 (require 'ox-html)
 (require 'seq)
 
-(defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
-(defconst anki-editor-prop-note-id "ANKI_NOTE_ID")
-(defconst anki-editor-prop-exporter "ANKI_EXPORTER")
-(defconst anki-editor-prop-deck "ANKI_DECK")
-(defconst anki-editor-prop-tags "ANKI_TAGS")
-(defconst anki-editor-prop-tags-plus (concat anki-editor-prop-tags "+"))
-(defconst anki-editor-prop-failure-reason "ANKI_FAILURE_REASON")
-(defconst anki-editor-buffer-html-output "*AnkiEditor HTML Output*")
-(defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
-(defconst anki-editor-exporter-raw "raw")
-(defconst anki-editor-exporter-default "default")
-(defconst anki-editor-api-version 5)
-
 (defgroup anki-editor nil
   "Customizations for anki-editor."
   :group 'org)
@@ -117,6 +104,8 @@ form entries."
 
 
 ;;; AnkiConnect
+
+(defconst anki-editor-api-version 5)
 
 (cl-defun anki-editor--http-send (url
                                   &rest settings
@@ -244,7 +233,7 @@ The result is the path to the newly stored media file."
     media-file-name))
 
 
-;;; Org Export Backend
+;;; Org export backend
 
 (defconst anki-editor--ox-anki-html-backend
   (org-export-create-backend
@@ -398,7 +387,18 @@ The implementation is borrowed and simplified from ox-html."
       (funcall oldfun link desc info)))
 
 
-;;; Core Functions
+;;; Core primitives
+
+(defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
+(defconst anki-editor-prop-note-id "ANKI_NOTE_ID")
+(defconst anki-editor-prop-exporter "ANKI_EXPORTER")
+(defconst anki-editor-prop-deck "ANKI_DECK")
+(defconst anki-editor-prop-tags "ANKI_TAGS")
+(defconst anki-editor-prop-tags-plus (concat anki-editor-prop-tags "+"))
+(defconst anki-editor-prop-failure-reason "ANKI_FAILURE_REASON")
+(defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
+(defconst anki-editor-exporter-raw "raw")
+(defconst anki-editor-exporter-default "default")
 
 (cl-defstruct anki-editor-note
   id model deck fields tags)
@@ -807,7 +807,7 @@ same as how it is used by `M-RET'(org-insert-heading)."
   (interactive)
   (org-export-to-buffer
       anki-editor--ox-anki-html-backend
-      anki-editor-buffer-html-output nil t nil t anki-editor--ox-export-ext-plist #'html-mode))
+      "*AnkiEditor HTML Output*" nil t nil t anki-editor--ox-export-ext-plist #'html-mode))
 
 (defun anki-editor-convert-region-to-html ()
   "Convert and replace region to HTML."
