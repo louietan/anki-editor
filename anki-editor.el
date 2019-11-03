@@ -247,63 +247,79 @@ The result is the path to the newly stored media file."
 ;;; Org Export Backend
 
 (defconst anki-editor--ox-anki-html-backend
-  (if anki-editor-use-math-jax
-      (org-export-create-backend
-       :parent 'html
-       :transcoders '((latex-fragment . anki-editor--ox-latex-for-mathjax)
-                      (latex-environment . anki-editor--ox-latex-for-mathjax)))
-    (org-export-create-backend
-     :parent 'html
-     :transcoders '((latex-fragment . anki-editor--ox-latex)
-                    (latex-environment . anki-editor--ox-latex)))))
+  (org-export-create-backend
+   :parent 'html
+   :transcoders '((latex-fragment . anki-editor--ox-latex)
+                  (latex-environment . anki-editor--ox-latex))))
 
 (defconst anki-editor--ox-export-ext-plist
   '(:with-toc nil :anki-editor-mode t))
 
-(defun anki-editor--translate-latex-delimiters (latex-code)
-  (catch 'done
-    (let ((delimiter-map (list (list (cons (format "^%s" (regexp-quote "$$")) "[$$]")
-                                     (cons (format "%s$" (regexp-quote "$$")) "[/$$]"))
-                               (list (cons (format "^%s" (regexp-quote "$")) "[$]")
-                                     (cons (format "%s$" (regexp-quote "$")) "[/$]"))
-                               (list (cons (format "^%s" (regexp-quote "\\(")) "[$]")
-                                     (cons (format "%s$" (regexp-quote "\\)")) "[/$]"))
-                               (list (cons (format "^%s" (regexp-quote "\\[")) "[$$]")
-                                     (cons (format "%s$" (regexp-quote "\\]")) "[/$$]"))))
-          (matched nil))
-      (save-match-data
-        (dolist (pair delimiter-map)
-          (dolist (delimiter pair)
-            (when (setq matched (string-match (car delimiter) latex-code))
-              (setq latex-code (replace-match (cdr delimiter) t t latex-code))))
-          (when matched (throw 'done latex-code)))))
-    latex-code))
+(macrolet ((with-table (table)
+                       `(cl-loop for delims in ,table
+                                 collect
+                                 (list (concat "^" (regexp-quote (car delims)))
+                                       (cadr delims)
+                                       (concat (regexp-quote (caddr delims)) "$")
+                                       (cadddr delims)))))
 
-(defun anki-editor--translate-latex-delimiters-to-anki-mathjax-delimiters (latex-code)
-  (catch 'done
-    (let ((delimiter-map (list (list (cons (format "^%s" (regexp-quote "$$")) "\\[")
-                                     (cons (format "%s$" (regexp-quote "$$")) "\\]"))
-                               (list (cons (format "^%s" (regexp-quote "$")) "\\(")
-                                     (cons (format "%s$" (regexp-quote "$")) "\\)"))))
-          (matched nil))
-      (save-match-data
-        (dolist (pair delimiter-map)
-          (dolist (delimiter pair)
-            (when (setq matched (string-match (car delimiter) latex-code))
-              (setq latex-code (replace-match (cdr delimiter) t t latex-code))))
-          (when matched (throw 'done latex-code)))))
-    latex-code))
+  (defconst anki-editor--native-latex-delimiters
+    (with-table '(("$$" "[$$]"
+                   "$$" "[/$$]")
+                  ("$" "[$]"
+                   "$" "[/$]")
+                  ("\\(" "[$]"
+                   "\\)" "[/$]")
+                  ("\\[" "[$$]"
+                   "\\]" "[/$$]"))))
+
+  (defconst anki-editor--mathjax-delimiters
+    (with-table '(("$$" "\\["
+                   "$$" "\\]")
+                  ("$" "\\("
+                   "$" "\\)")))))
+
+(defmacro anki-editor--enclose-with (tag &rest children)
+  (declare (indent defun))
+  `(format "<%s>%s</%s>"
+           ,(symbol-name tag)
+           (concat ,@children)
+           ,(symbol-name tag)))
 
 (defun anki-editor--wrap-latex (content)
   "Wrap CONTENT with Anki-style latex markers."
-  (format "<p><div>[latex]</div>%s<div>[/latex]</div></p>" content))
-
-(defun anki-editor--wrap-latex-for-mathjax (content)
-  "Wrap CONTENT for Anki's native MathJax support."
-  (format "<p>%s</p>" content))
+  (anki-editor--enclose-with p
+    (anki-editor--enclose-with div "[latex]")
+    content
+    (anki-editor--enclose-with div "[/latex]")))
 
 (defun anki-editor--wrap-div (content)
-  (format "<div>%s</div>" content))
+  (anki-editor--enclose-with div content))
+
+(defun anki-editor--translate-latex-fragment (latex-code)
+  (let ((table (if anki-editor-use-math-jax
+                   anki-editor--mathjax-delimiters
+                 anki-editor--native-latex-delimiters)))
+    (cl-loop for delims in table
+             with matched = nil
+             when (setq matched (string-match (car delims) latex-code))
+             do
+             (setq latex-code (replace-match (cadr delims) t t latex-code))
+             (string-match (caddr delims) latex-code)
+             (setq latex-code (replace-match (cadddr delims) t t latex-code))
+             until matched
+             finally return latex-code)))
+
+(defun anki-editor--translate-latex-env (latex-code)
+  (let ((latex-block (mapconcat
+                      #'anki-editor--wrap-div
+                      (split-string (org-html-encode-plain-text latex-code)
+                                    "\n")
+                      "")))
+    (if anki-editor-use-math-jax
+        (anki-editor--enclose-with p
+          latex-block)
+      (anki-editor--wrap-latex latex-block))))
 
 (defun anki-editor--ox-latex (latex _contents _info)
   "Transcode LATEX from Org to HTML.
@@ -311,28 +327,8 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
   (let ((code (org-remove-indentation (org-element-property :value latex))))
     (setq code
           (pcase (org-element-type latex)
-            ('latex-fragment (anki-editor--translate-latex-delimiters code))
-            ('latex-environment (anki-editor--wrap-latex
-                                 (mapconcat #'anki-editor--wrap-div
-                                            (split-string (org-html-encode-plain-text code) "\n")
-                                            "")))))
-
-    (if anki-editor-break-consecutive-braces-in-latex
-        (replace-regexp-in-string "}}" "} } " code)
-      code)))
-
-(defun anki-editor--ox-latex-for-mathjax (latex _contents _info)
-  "Transcode LATEX from Org to HTML.
-CONTENTS is nil.  INFO is a plist holding contextual information."
-  (let ((code (org-remove-indentation (org-element-property :value latex))))
-    (setq code
-          (pcase (org-element-type latex)
-            ('latex-fragment (anki-editor--translate-latex-delimiters-to-anki-mathjax-delimiters code))
-            ('latex-environment (anki-editor--wrap-latex-for-mathjax
-                                 (mapconcat #'anki-editor--wrap-div
-                                            (split-string (org-html-encode-plain-text code) "\n")
-                                            "")))))
-
+            ('latex-fragment (anki-editor--translate-latex-fragment code))
+            ('latex-environment (anki-editor--translate-latex-env code))))
     (if anki-editor-break-consecutive-braces-in-latex
         (replace-regexp-in-string "}}" "} } " code)
       code)))
@@ -340,7 +336,6 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
 (defun anki-editor--ox-html-link (oldfun link desc info)
   "When LINK is a link to local file, transcodes it to html and stores the target file to Anki, otherwise calls OLDFUN for help.
 The implementation is borrowed and simplified from ox-html."
-
   (or (catch 'giveup
         (unless (plist-get info :anki-editor-mode)
           (throw 'giveup nil))
