@@ -2,6 +2,21 @@
 
 * Changelog
 
+** Unreleased
+
+   1. Removed variable ~anki-editor-create-decks~, now decks are
+      created automatically
+   2. Identifiers prefixed with ~anki-editor-anki-connect-~ were
+      renamed to ~anki-editor-api-~
+   3. Added two macros ~anki-editor-api-with-multi~ and
+      ~anki-editor-api-enqueue~ to make working with multi api calls
+      easier
+   4. Fixed computing hash of media files against file names instead
+      of file content
+   5. Supports literal note fields
+   6. Added more utility commands/functions
+   7. Minor internal code refactoring
+
 ** v0.3.3
 
    - Reenable support for setting tags with =ANKI_TAGS= property

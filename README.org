@@ -72,8 +72,8 @@ there are any ambiguity or grammatical mistakes ;-)/
    | anki-editor-cloze-dwim             | Cloze current active region or a word the under the cursor.                                       |
    | anki-editor-export-subtree-to-html | Export the subtree at point to HTML.                                                              |
    | anki-editor-convert-region-to-html | Convert and replace region to HTML.                                                               |
-   | anki-editor-anki-connect-check     | Check if correct version of AnkiConnect is running.                                               |
-   | anki-editor-anki-connect-upgrade   | Upgrade AnkiConnect.                                                                              |
+   | anki-editor-api-check              | Check if correct version of AnkiConnect is running.                                               |
+   | anki-editor-api-upgrade            | Upgrade AnkiConnect.                                                                              |
    | anki-editor-sync-collections       | Synchronize your local anki collection.                                                           |
    | anki-editor-gui-browse             | Open Anki Browser with a query for current note or deck.                                          |
    | anki-editor-gui-add-cards          | Open Anki Add Cards dialog with presets from current note entry.                                  |
@@ -82,14 +82,64 @@ there are any ambiguity or grammatical mistakes ;-)/
 
    | Name                                          | Default Value          | Description                                                                                              |
    |-----------------------------------------------+------------------------+----------------------------------------------------------------------------------------------------------|
-   | anki-editor-anki-connect-listening-address    | "127.0.0.1"            | The network address AnkiConnect is listening.                                                            |
-   | anki-editor-anki-connect-listening-port       | "8765"                 | The port number AnkiConnect is listening.                                                                |
+   | anki-editor-api-host                          | "127.0.0.1"            | The network address AnkiConnect is listening.                                                            |
+   | anki-editor-api-port                          | "8765"                 | The port number AnkiConnect is listening.                                                                |
    | anki-editor-break-consecutive-braces-in-latex | nil                    | If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze. |
-   | anki-editor-create-decks                      | nil                    | If non-nil, creates deck before creating a note.                                                         |
    | anki-editor-ignored-org-tags                  | '("export" "noexport") | A list of Org tags that are ignored when constructing notes form entries.                                |
    | anki-editor-org-tags-as-anki-tags             | t                      | If nil, tags of entries wont't be counted as Anki tags.                                                  |
    | anki-editor-protected-tags                    | '("marked" "leech")    | A list of tags that won't be deleted from Anki even though they're absent in Org entries.                |
    | anki-editor-use-math-jax                      | nil                    | Use Anki's built in MathJax support instead of LaTeX.                                                    |
+
+** Functions and Macros
+
+*** anki-editor-map-note-entries
+
+    Simple wrapper that calls ~org-map-entries~ with
+    ~&ANKI_NOTE_TYPE<>\"\"~ appended to MATCH.
+
+*** anki-editor-api-call
+
+    Invoke AnkiConnect with ACTION and PARAMS.
+
+*** anki-editor-api-call-result
+
+    Calls above, returns result field or raise an error.
+
+*** anki-editor-api-with-multi
+
+    Used in combination with ~anki-editor-api-enqueue~ to queue
+    multiple api calls and combine them into one 'multi' call at the
+    end, return the results of these calls in the same order.
+
+    Usage:
+    #+begin_src elisp
+      (cl-destructuring-bind (decks models tags notes)
+          (anki-editor-api-with-multi
+           ;; The following api calls will be combined into one 'multi' call.
+           (anki-editor-api-enqueue 'deckNames)
+           (anki-editor-api-enqueue 'modelNames)
+           (anki-editor-api-enqueue 'getTags)
+           (anki-editor-api-enqueue 'findNotes :query "deck:Default"))
+        (message (concat "decks: %S\n"
+                         "models: %S\n"
+                         "tags: %S\n"
+                         "notes: %S")
+                 decks models tags notes))
+    #+end_src
+
+*** anki-editor-api-enqueue
+
+    Like ~anki-editor-api-call~, but is only used in combination with
+    ~anki-editor-api-with-multi~.  Instead of sending the request
+    directly, it simply queues the request.
+
+*** anki-editor-note-at-point
+
+    Make a note struct from current entry.
+
+*** anki-editor-find-notes
+
+    Find notes with QUERY.
 
 * Limitations
 
@@ -104,40 +154,6 @@ there are any ambiguity or grammatical mistakes ;-)/
    This package might not work well with certain Anki add-ons
    especially those who extend the builtin Anki note editor to
    automatically fill note field content (e.g. ~Add note id~).
-
-* Troubleshooting
-
-  In case of a failed operation and this package doesn't provide much
-  useful information, don't be frustrated, see below for some hints.
-
-  1. Decks don't exist in Anki. This package by default doesn't create
-     decks for you, when trying out this package with ~examples.org~,
-     you might find that every single note creation fails, simply
-     because they're fake decks that might not be in your Anki
-     collection. If you'd like it to automatically create missing
-     decks, set ~anki-editor-create-decks~ to ~t~.
-
-  2. Note is counted as a duplicate. From [[https://apps.ankiweb.net/docs/manual.html#adding-cards-and-notes][Anki docs]]
-     #+BEGIN_QUOTE
-     Anki checks the first field for uniqueness, so it will warn you
-     if you enter two cards with a Front field of “apple” (for
-     example). The uniqueness check is limited to the current note
-     type, so if you’re studying multiple languages, two cards with
-     the same Front would not be listed as duplicates as long as you
-     had a different note type for each language.
-     #+END_QUOTE
-
-  If all the above don't help, then we have to go deeper to find out
-  what goes wrong. Here are some methods:
-
-  - Turn on logging in ~request.el~. Customize ~request-log-level~ to
-    ~debug~, retry failed actions and switch to buffer
-    ~ *request-log*~ (there's a leading space, see [[https://www.emacswiki.org/emacs/InvisibleBuffers][invisible buffer]])
-    to get logs from ~request.el~. This way we can't inspect the
-    request payload, since it's dumped into a temp file that's deleted
-    when request finishes.
-  - Use a traffic sniffer to inspect communications between Emacs and
-    Anki.
 
 * Demo
 
