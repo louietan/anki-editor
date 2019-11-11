@@ -15,7 +15,9 @@
       of file content
    5. Supports literal note fields
    6. Added more utility commands/functions
-   7. Minor internal code refactoring
+   7. ~anki-editor-use-math-jax~ was replaced with
+      ~anki-editor-latex-style~
+   8. Minor internal code refactoring
 
 ** v0.3.3
 

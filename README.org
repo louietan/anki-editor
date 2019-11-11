@@ -88,7 +88,7 @@ there are any ambiguity or grammatical mistakes ;-)/
    | anki-editor-ignored-org-tags                  | '("export" "noexport") | A list of Org tags that are ignored when constructing notes form entries.                                |
    | anki-editor-org-tags-as-anki-tags             | t                      | If nil, tags of entries wont't be counted as Anki tags.                                                  |
    | anki-editor-protected-tags                    | '("marked" "leech")    | A list of tags that won't be deleted from Anki even though they're absent in Org entries.                |
-   | anki-editor-use-math-jax                      | nil                    | Use Anki's built in MathJax support instead of LaTeX.                                                    |
+   | anki-editor-latex-style                       | builtin                | The style of latex to translate into.                                                                    |
 
 ** Functions and Macros
 

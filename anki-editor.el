@@ -98,8 +98,10 @@ form entries."
   "8765"
   "The port number AnkiConnect is listening.")
 
-(defcustom anki-editor-use-math-jax nil
-  "Use Anki's built in MathJax support instead of LaTeX.")
+(defcustom anki-editor-latex-style 'builtin
+  "The style of latex to translate into."
+  :type '(radio (const :tag "Built-in" builtin)
+                (const :tag "MathJax" mathjax)))
 
 
 ;;; AnkiConnect
@@ -271,24 +273,23 @@ The result is the path to the newly stored media file."
                    "$" "\\)")))))
 
 (defun anki-editor--translate-latex-fragment (latex-code)
-  (let ((table (if anki-editor-use-math-jax
-                   anki-editor--mathjax-delimiters
-                 anki-editor--native-latex-delimiters)))
-    (cl-loop for delims in table
-             for matches = (string-match (cl-first delims) latex-code)
-             when matches
-             do
-             (setq latex-code (replace-match (cl-second delims) t t latex-code))
-             (string-match (cl-third delims) latex-code)
-             (setq latex-code (replace-match (cl-fourth delims) t t latex-code))
-             until matches
-             finally return latex-code)))
+  (cl-loop for delims in (cl-ecase anki-editor-latex-style
+                           (builtin anki-editor--native-latex-delimiters)
+                           (mathjax anki-editor--mathjax-delimiters))
+           for matches = (string-match (cl-first delims) latex-code)
+           when matches
+           do
+           (setq latex-code (replace-match (cl-second delims) t t latex-code))
+           (string-match (cl-third delims) latex-code)
+           (setq latex-code (replace-match (cl-fourth delims) t t latex-code))
+           until matches
+           finally return latex-code))
 
 (defun anki-editor--translate-latex-env (latex-code)
   (setq latex-code (replace-regexp-in-string "\n" "<br>" (org-html-encode-plain-text latex-code)))
-  (if anki-editor-use-math-jax
-      (concat "\\[<br>" latex-code "\\]")
-    (concat "[latex]<br>" latex-code "[/latex]")))
+  (cl-ecase anki-editor-latex-style
+    (builtin (concat "[latex]<br>" latex-code "[/latex]"))
+    (mathjax (concat "\\[<br>" latex-code "\\]"))))
 
 (defun anki-editor--ox-latex (latex _contents _info)
   "Transcode LATEX from Org to HTML.
