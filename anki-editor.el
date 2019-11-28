@@ -103,6 +103,9 @@ form entries."
   "Use Anki's built in MathJax support instead of LaTeX.")
 
 
+(defcustom anki-editor-note-match nil
+  "Additional matching string for mapping through anki note headings.")
+
 ;;; AnkiConnect
 
 (defconst anki-editor-api-version 5)
@@ -408,8 +411,11 @@ The implementation is borrowed and simplified from ox-html."
   `&ANKI_NOTE_TYPE<>\"\"' appended to MATCH."
   ;; disable property inheritance temporarily, or all subheadings of a
   ;; note heading will be counted as note headings as well
-  (let ((org-use-property-inheritance nil))
-    (org-map-entries func (concat match "&" anki-editor-prop-note-type "<>\"\"") scope skip)))
+  (let ((org-use-property-inheritance nil)
+	(match (if anki-editor-note-match
+		   (concat match "&" anki-editor-note-match "&" anki-editor-prop-note-type "<>\"\"")
+		 (concat match "&" anki-editor-prop-note-type "<>\"\""))))
+    (org-map-entries func match scope skip)))
 
 (defun anki-editor--insert-note-skeleton (prefix deck heading note-type fields)
   "Insert a note subtree (skeleton) with HEADING, NOTE-TYPE and FIELDS.
