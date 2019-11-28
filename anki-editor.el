@@ -102,6 +102,14 @@ form entries."
 (defcustom anki-editor-use-math-jax nil
   "Use Anki's built in MathJax support instead of LaTeX.")
 
+(defcustom anki-editor-quick-field-mapping
+  '(("Basic" . ("Front" . "Back")))
+  "Associate note title and contents with fields.
+
+E.g. (\"Basic\" . (\"Front\" . \"Back\")) uses note title for
+note field \"Front\" and the contents with note field \"Back\"
+for the note type \"Basic\"."
+  :type '(list))
 
 ;;; AnkiConnect
 
@@ -242,7 +250,7 @@ The result is the path to the newly stored media file."
                   (latex-environment . anki-editor--ox-latex))))
 
 (defconst anki-editor--ox-export-ext-plist
-  '(:with-toc nil :anki-editor-mode t))
+  '(:with-toc nil :anki-editor-mode t :with-drawers nil :with-planning nil))
 
 (macrolet ((with-table (table)
                        `(cl-loop for delims in ,table
@@ -564,12 +572,56 @@ Where the subtree is created depends on PREFIX."
 	     (values (and value (split-string value))))
     (mapcar #'org-entry-restore-space values)))
 
+(defun anki-editor-get-quick-fields ()
+  ""
+  (interactive)
+  (let* (quick-fields
+         (note-heading (org-element-at-point))
+         (note-title (org-element-property :title note-heading))
+         (note-type (org-element-property :ANKI_NOTE_TYPE note-heading))
+         (quick-field-mapping (alist-get note-type anki-editor-quick-field-mapping nil nil 'equal))
+         (title-field (car quick-field-mapping))
+         (contents-field (cdr quick-field-mapping))
+         (contents-begin (org-element-property :contents-begin note-heading))
+         (contents-end (org-element-property :contents-end note-heading))
+         (point-of-first-child (- (save-excursion
+                                    (if (org-goto-first-child)
+                                        (point)
+                                      (point-max)))
+                                  1)))
+    (when title-field
+      (map-put quick-fields
+               title-field
+               (org-export-string-as note-title
+                                     anki-editor--ox-anki-html-backend
+                                     t
+                                     anki-editor--ox-export-ext-plist)
+               'equal))
+    (when contents-field
+      (map-put quick-fields
+               contents-field
+               (cond
+                ((and contents-begin contents-end)
+                 (org-export-string-as
+                  (buffer-substring
+                   contents-begin
+                   ;; in case the buffer is narrowed,
+                   ;; e.g. by `org-map-entries' when
+                   ;; scope is `tree'
+                   (min (point-max) contents-end point-of-first-child))
+                  anki-editor--ox-anki-html-backend
+                  t
+                  anki-editor--ox-export-ext-plist))
+                (t ""))
+               'equal))
+    quick-fields))
+
 (defun anki-editor--build-fields ()
   "Build a list of fields from subheadings of current heading,
 each element of which is a cons cell, the car of which is field
 name and the cdr of which is field content."
   (save-excursion
-    (let (fields
+    (let ((fields (anki-editor-get-quick-fields))
           (point-of-last-child (point)))
       (when (org-goto-first-child)
         (while (/= point-of-last-child (point))
@@ -606,23 +658,24 @@ name and the cdr of which is field content."
                                         ;; scope is `tree'
                                         (min (point-max) contents-end)))
                                   ""))
-            (push (cons field-name
-                        (pcase exporter
-                          ((pred (string= anki-editor-exporter-raw))
-                           raw-content)
-                          ((pred (string= anki-editor-exporter-default))
-                           (or (org-export-string-as
-                                raw-content
-                                anki-editor--ox-anki-html-backend
-                                t
-                                anki-editor--ox-export-ext-plist)
-                               ;; 8.2.10 version of
-                               ;; `org-export-filter-apply-functions'
-                               ;; returns nil for an input of empty string,
-                               ;; which will cause AnkiConnect to fail
-                               ""))
-                          (_ (error "Invalid exporter: %s" exporter))))
-                  fields)
+            (map-put fields
+		     field-name
+                     (pcase exporter
+                       ((pred (string= anki-editor-exporter-raw))
+                        raw-content)
+                       ((pred (string= anki-editor-exporter-default))
+                        (or (org-export-string-as
+                             raw-content
+                             anki-editor--ox-anki-html-backend
+                             t
+                             anki-editor--ox-export-ext-plist)
+                            ;; 8.2.10 version of
+                            ;; `org-export-filter-apply-functions'
+                            ;; returns nil for an input of empty string,
+                            ;; which will cause AnkiConnect to fail
+                            ""))
+                       (_ (error "Invalid exporter: %s" exporter)))
+                     'equal)
             (org-forward-heading-same-level nil t))))
       (reverse fields))))
 
