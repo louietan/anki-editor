@@ -71,11 +71,13 @@
 (defcustom anki-editor-break-consecutive-braces-in-latex
   nil
   "If non-nil, consecutive `}' will be automatically separated by spaces to prevent early-closing of cloze.
-See https://apps.ankiweb.net/docs/manual.html#latex-conflicts.")
+See https://apps.ankiweb.net/docs/manual.html#latex-conflicts."
+  :type 'boolean)
 
 (defcustom anki-editor-org-tags-as-anki-tags
   t
-  "If nil, tags of entries won't be counted as Anki tags.")
+  "If nil, tags of entries won't be counted as Anki tags."
+  :type 'boolean)
 
 (defcustom anki-editor-protected-tags
   '("marked" "leech")
@@ -92,11 +94,13 @@ form entries."
 
 (defcustom anki-editor-api-host
   "127.0.0.1"
-  "The network address AnkiConnect is listening.")
+  "The network address AnkiConnect is listening."
+  :type 'string)
 
 (defcustom anki-editor-api-port
   "8765"
-  "The port number AnkiConnect is listening.")
+  "The port number AnkiConnect is listening."
+  :type 'string)
 
 (defcustom anki-editor-latex-style 'builtin
   "The style of latex to translate into."
@@ -110,7 +114,7 @@ form entries."
 
 (cl-defun anki-editor--fetch (url
                               &rest settings
-                              &key type data success error parser
+                              &key type data success _error parser
                               &allow-other-keys)
   "This is a simplistic little function to make http requests using cURL.
 The api is borrowed from request.el.  It exists because
@@ -145,7 +149,7 @@ more digging."
 (defun anki-editor-api-call (action &rest params)
   "Invoke AnkiConnect with ACTION and PARAMS."
   (let ((payload (list :action action :version anki-editor-api-version))
-        (request-backend 'curl)
+        (_request-backend 'curl)
         (json-array-type 'list)
         reply err)
 
@@ -189,7 +193,7 @@ of these calls in the same order."
                       (vconcat
                        --anki-editor-var-multi-actions--))))
      (cl-loop for result in --anki-editor-var-multi-results--
-              do (when-let ((_ (listp result))
+              do (when-let ((pred (listp result))
                             (err (alist-get 'error result)))
                    (error err))
               collect result)))
