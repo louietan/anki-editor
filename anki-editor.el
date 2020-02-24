@@ -878,7 +878,9 @@ When note heading is not provided, it is used as the first field."
 (defun anki-editor-api-check ()
   "Check if correct version of AnkiConnect is serving."
   (interactive)
-  (let ((ver (anki-editor-api-call-result 'version)))
+  (let ((ver (condition-case err
+                 (anki-editor-api-call-result 'version)
+               (error (error "Failed to connect to Anki: %s" (error-message-string err))))))
     (if (<= anki-editor-api-version ver)
         (when (called-interactively-p 'interactive)
           (message "AnkiConnect v.%d is running" ver))
