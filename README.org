@@ -61,22 +61,22 @@ there are any ambiguity or grammatical mistakes ;-)/
 
 ** Commands
 
-   | Command                            | Description                                                                                       |
-   |------------------------------------+---------------------------------------------------------------------------------------------------|
-   | anki-editor-mode                   | Toggle this minor mode.                                                                           |
-   | anki-editor-push-notes             | Push notes to Anki. Additional arguments can be used to restrict the range of notes.              |
-   | anki-editor-push-new-notes         | Similar to ~anki-editor-push-notes~, but push those that are without ~ANKI_NOTE_ID~.              |
-   | anki-editor-retry-failed-notes     | Similar to ~anki-editor-push-notes~, except that it only pushes notes with ~ANKI_FAILURE_REASON~. |
-   | anki-editor-insert-note            | Insert a note entry like ~M-RET~, interactively.                                                  |
-   | anki-editor-delete-notes           | Delete notes or the note at point.                                                                |
-   | anki-editor-cloze-dwim             | Cloze current active region or a word the under the cursor.                                       |
-   | anki-editor-export-subtree-to-html | Export the subtree at point to HTML.                                                              |
-   | anki-editor-convert-region-to-html | Convert and replace region to HTML.                                                               |
-   | anki-editor-api-check              | Check if correct version of AnkiConnect is running.                                               |
-   | anki-editor-api-upgrade            | Upgrade AnkiConnect.                                                                              |
-   | anki-editor-sync-collections       | Synchronize your local anki collection.                                                           |
-   | anki-editor-gui-browse             | Open Anki Browser with a query for current note or deck.                                          |
-   | anki-editor-gui-add-cards          | Open Anki Add Cards dialog with presets from current note entry.                                  |
+   | Command                            | Description                                                                                                                    |
+   |------------------------------------+--------------------------------------------------------------------------------------------------------------------------------|
+   | anki-editor-mode                   | Toggle this minor mode.                                                                                                        |
+   | anki-editor-push-notes             | Push notes to Anki. Additional arguments can be used to restrict the range of notes.                                           |
+   | anki-editor-push-new-notes         | Similar to ~anki-editor-push-notes~, but push those that are without ~ANKI_NOTE_ID~.                                           |
+   | anki-editor-retry-failed-notes     | Similar to ~anki-editor-push-notes~, except that it only pushes notes with ~ANKI_FAILURE_REASON~.                              |
+   | anki-editor-insert-note            | Insert a note entry like ~M-RET~, interactively.  When note heading is not provided or is blank, it's used as the first field. |
+   | anki-editor-delete-notes           | Delete notes or the note at point.                                                                                             |
+   | anki-editor-cloze-dwim             | Cloze current active region or a word the under the cursor.                                                                    |
+   | anki-editor-export-subtree-to-html | Export the subtree at point to HTML.                                                                                           |
+   | anki-editor-convert-region-to-html | Convert and replace region to HTML.                                                                                            |
+   | anki-editor-api-check              | Check if correct version of AnkiConnect is running.                                                                            |
+   | anki-editor-api-upgrade            | Upgrade AnkiConnect.                                                                                                           |
+   | anki-editor-sync-collections       | Synchronize your local anki collection.                                                                                        |
+   | anki-editor-gui-browse             | Open Anki Browser with a query for current note or deck.                                                                       |
+   | anki-editor-gui-add-cards          | Open Anki Add Cards dialog with presets from current note entry.                                                               |
 
 ** Variables
 

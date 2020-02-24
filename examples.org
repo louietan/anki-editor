@@ -1,5 +1,7 @@
 #+PROPERTY: ANKI_DECK Default
 
+*Tip: Click the Raw button on the right to view the original Org file*
+
 * Deck in file
   :PROPERTIES:
   :ANKI_NOTE_TYPE: Cloze
@@ -30,19 +32,32 @@
 
 ** Back
    :PROPERTIES:
-   :ANKI_EXPORTER: raw
+   :ANKI_FORMAT: nil
    :END:
 
-   With property <code>:ANKI_EXPORTER: raw</code>, content of the
+   With property <code>:ANKI_FORMAT: nil</code>, content of the
    field will be sent to Anki <em>unprocessed</em>.  You can use
    whatever Anki supports, like HTML tags.
    <br>
    <br>
    This property is retrieved with inheritance, meaning that it can be
    set in any ancestor entries or at the top of the file with
-   <code>#+PROPERTY: ANKI_EXPORTER raw</code>, it's also possible to
-   override an outer level raw exporter with <code>:ANKI_EXPORTER:
-   default</code>.
+   <code>#+PROPERTY: ANKI_FORMAT nil</code>, it's also possible to
+   override an outer level nil format with <code>:ANKI_FORMAT: t</code>.
+
+* Is there a shorter way to write notes?
+  :PROPERTIES:
+  :ANKI_NOTE_TYPE: Basic
+  :END:
+
+** Back
+
+   Yes, like this one, Front is missing, ~anki-editor~ will use note
+   heading as Front.  This is neat as sometimes it's verbose to repeat
+   the same content in note heading and first field.
+
+   This works for all note types, just make one field absent and
+   ~anki-editor~ will use note heading as that missing field.
 
 * Languages
   :PROPERTIES:
@@ -80,12 +95,12 @@
      1) That + 一个完整的句子, that无实际意义
      2) 由疑问句改装而成
 
-** Dialects
+** Dialects                                                         :dialect:
 
 *** Cantonese
     :PROPERTIES:
     :ANKI_NOTE_TYPE: Basic (and reversed card)
-    :ANKI_TAGS: dialect cantonese
+    :ANKI_TAGS: cantonese
     :END:
 
 **** Front

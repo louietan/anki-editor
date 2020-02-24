@@ -18,6 +18,7 @@
    7. ~anki-editor-use-math-jax~ was replaced with
       ~anki-editor-latex-style~
    8. Minor internal code refactoring
+   9. Allows to put one field in heading
 
 ** v0.3.3
 

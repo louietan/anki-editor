@@ -114,7 +114,10 @@ form entries."
 
 (cl-defun anki-editor--fetch (url
                               &rest settings
-                              &key type data success _error parser
+                              &key
+                              (type "GET")
+                              data success _error
+                              (parser 'buffer-string)
                               &allow-other-keys)
   "This is a simplistic little function to make http requests using cURL.
 The api is borrowed from request.el.  It exists because
@@ -128,10 +131,11 @@ determine whether it's a bug in Emacs and make a patch requires
 more digging."
   (let ((tempfile (make-temp-file "emacs-anki-editor"))
         (responsebuf (generate-new-buffer " *anki-editor-curl*")))
-    (with-temp-file tempfile
-      (setq buffer-file-coding-system 'utf-8)
-      (set-buffer-multibyte t)
-      (insert data))
+    (when data
+      (with-temp-file tempfile
+        (setq buffer-file-coding-system 'utf-8)
+        (set-buffer-multibyte t)
+        (insert data)))
     (unwind-protect
         (with-current-buffer responsebuf
           (apply #'call-process "curl" nil t nil (list
@@ -142,7 +146,8 @@ more digging."
                                                   (concat "@" tempfile)))
 
           (goto-char (point-min))
-          (apply success (list :data (funcall parser))))
+          (when success
+            (apply success (list :data (funcall parser)))))
       (kill-buffer responsebuf)
       (delete-file tempfile))))
 
@@ -250,7 +255,7 @@ The result is the path to the newly stored media file."
                   (latex-environment . anki-editor--ox-latex))))
 
 (defconst anki-editor--ox-export-ext-plist
-  '(:with-toc nil :anki-editor-mode t))
+  '(:with-toc nil :with-properties nil :with-planning nil :anki-editor-mode t))
 
 (cl-macrolet ((with-table (table)
                           `(cl-loop for delims in ,table
@@ -370,22 +375,69 @@ The implementation is borrowed and simplified from ox-html."
            (t (throw 'giveup nil)))))
       (funcall oldfun link desc info)))
 
+(defun anki-editor--export-string (src fmt)
+  (cl-ecase fmt
+    ('nil src)
+    ('t (or (org-export-string-as src
+                                  anki-editor--ox-anki-html-backend
+                                  t
+                                  anki-editor--ox-export-ext-plist)
+            ;; 8.2.10 version of
+            ;; `org-export-filter-apply-functions'
+            ;; returns nil for an input of empty string,
+            ;; which will cause AnkiConnect to fail
+            ""))))
+
 
 ;;; Core primitives
 
 (defconst anki-editor-prop-note-type "ANKI_NOTE_TYPE")
 (defconst anki-editor-prop-note-id "ANKI_NOTE_ID")
-(defconst anki-editor-prop-exporter "ANKI_EXPORTER")
+(defconst anki-editor-prop-format "ANKI_FORMAT")
 (defconst anki-editor-prop-deck "ANKI_DECK")
 (defconst anki-editor-prop-tags "ANKI_TAGS")
 (defconst anki-editor-prop-tags-plus (concat anki-editor-prop-tags "+"))
 (defconst anki-editor-prop-failure-reason "ANKI_FAILURE_REASON")
 (defconst anki-editor-org-tag-regexp "^\\([[:alnum:]_@#%]+\\)+$")
-(defconst anki-editor-exporter-raw "raw")
-(defconst anki-editor-exporter-default "default")
 
 (cl-defstruct anki-editor-note
   id model deck fields tags)
+
+(defvar anki-editor--collection-data-updated nil
+  "Whether or not collection data is updated from Anki. Used by `anki-editor--with-collection-data-updated' to avoid unnecessary updates.")
+
+;; The following variables should only be used inside `anki-editor--with-collection-data-updated'.
+
+(defvar anki-editor--model-names nil
+  "Note types from Anki.")
+
+(defvar anki-editor--model-fields nil
+  "Alist of (NOTE-TYPE . FIELDS).")
+
+(defmacro anki-editor--with-collection-data-updated (&rest body)
+  "Execute BODY with collection data updated from Anki.
+
+Note that since we have no idea of whether BODY will update collection
+data, BODY might read out-dated data.  This doesn't matter right now
+as note types won't change in BODY."
+  (declare (indent defun) (debug t))
+  `(if anki-editor--collection-data-updated
+       (progn ,@body)
+     (cl-destructuring-bind (models)
+         (anki-editor-api-with-multi
+          (anki-editor-api-enqueue 'modelNames))
+       (unwind-protect
+           (progn
+             (setq anki-editor--collection-data-updated t
+                   anki-editor--model-names models
+                   anki-editor--model-fields
+                   (cl-loop for flds in (eval `(anki-editor-api-with-multi
+                                                ,@(cl-loop for mod in models
+                                                           collect `(anki-editor-api-enqueue 'modelFieldNames :modelName ,mod))))
+                            for mod in models
+                            collect (cons mod flds)))
+             ,@body)
+         (setq anki-editor--collection-data-updated nil)))))
 
 (defun anki-editor-map-note-entries (func &optional match scope &rest skip)
   "Simple wrapper that calls `org-map-entries' with
@@ -395,8 +447,8 @@ The implementation is borrowed and simplified from ox-html."
   (let ((org-use-property-inheritance nil))
     (org-map-entries func (concat match "&" anki-editor-prop-note-type "<>\"\"") scope skip)))
 
-(defun anki-editor--insert-note-skeleton (prefix deck heading note-type fields)
-  "Insert a note subtree (skeleton) with HEADING, NOTE-TYPE and FIELDS.
+(defun anki-editor--insert-note-skeleton (prefix deck heading type fields)
+  "Insert a note subtree (skeleton) with HEADING, TYPE and FIELDS.
 Where the subtree is created depends on PREFIX."
   (org-insert-heading prefix)
   (insert heading)
@@ -407,7 +459,7 @@ Where the subtree is created depends on PREFIX."
             (and (not (string-blank-p deck))
                  (string= deck (org-entry-get-with-inheritance anki-editor-prop-deck))))
     (org-set-property anki-editor-prop-deck deck))
-  (org-set-property anki-editor-prop-note-type note-type)
+  (org-set-property anki-editor-prop-note-type type)
   (dolist (field fields)
     (save-excursion
       (org-insert-heading-respect-content)
@@ -474,7 +526,7 @@ Where the subtree is created depends on PREFIX."
   (pcase property
     ((pred (string= anki-editor-prop-deck)) (anki-editor-deck-names))
     ((pred (string= anki-editor-prop-note-type)) (anki-editor-note-types))
-    ((pred (string= anki-editor-prop-exporter)) (list anki-editor-exporter-raw anki-editor-exporter-default))
+    ((pred (string= anki-editor-prop-format)) (list "t" "nil"))
     ((pred (string-match-p (format "%s\\+?" anki-editor-prop-tags))) (anki-editor-all-tags))
     (_ nil)))
 
@@ -511,20 +563,47 @@ Where the subtree is created depends on PREFIX."
   "Get note types from Anki."
   (anki-editor-api-call-result 'modelNames))
 
+(defun anki-editor-entry-format ()
+  (read (or (org-entry-get-with-inheritance anki-editor-prop-format t) "t")))
+
+(defun anki-editor-toggle-format ()
+  "Cycle ANKI_FROMAT through \"nil\" and \"t\"."
+  (interactive)
+  (let ((val (pcase (org-entry-get nil anki-editor-prop-format nil t)
+               ('nil "nil")
+               ("nil" "t")
+               ("t" nil)
+               (_ "nil"))))
+    (if val
+        (org-entry-put nil anki-editor-prop-format val)
+      (org-entry-delete nil anki-editor-prop-format))))
+
 (defun anki-editor-note-at-point ()
   "Make a note struct from current entry."
   (let ((org-trust-scanner-tags t)
         (deck (org-entry-get-with-inheritance anki-editor-prop-deck))
+        (format (anki-editor-entry-format))
         (note-id (org-entry-get nil anki-editor-prop-note-id))
         (note-type (org-entry-get nil anki-editor-prop-note-type))
         (tags (cl-set-difference (anki-editor--get-tags)
                                  anki-editor-ignored-org-tags
-                                 :test 'string=))
+                                 :test #'string=))
         (fields (anki-editor--build-fields)))
 
-    (unless deck (error "No deck specified"))
+    (anki-editor--with-collection-data-updated
+      (when-let ((missing (cl-set-difference
+                           (alist-get note-type anki-editor--model-fields nil nil #'string=)
+                           (mapcar #'car fields)
+                           :test #'string=)))
+        ;; use heading as the missing field
+        (push (cons (car missing)
+                    (anki-editor--export-string
+                     (substring-no-properties (org-get-heading t t t))
+                     format))
+              fields)))
+
+    (unless deck (error "Missing deck"))
     (unless note-type (error "Missing note type"))
-    (unless fields (error "Missing fields"))
 
     (make-anki-editor-note :id note-id
                            :model note-type
@@ -558,22 +637,18 @@ Return a list of cons of (FIELD-NAME . FIELD-CONTENT)."
              for element = (org-element-at-point)
              for heading = (substring-no-properties
                             (org-element-property :raw-value element))
-             for exporter = (or (org-entry-get-with-inheritance anki-editor-prop-exporter)
-                                anki-editor-exporter-default)
-             for begin = (cond
-                          ((string= exporter anki-editor-exporter-raw)
-                           ;; contents-begin includes drawers and scheduling data,
-                           ;; which we'd like to ignore, here we skip these
-                           ;; elements and reset contents-begin.
-                           (cl-loop for eoh = (org-element-property :contents-begin element)
-                                    then (org-element-property :end subelem)
-                                    for subelem = (progn
-                                                    (goto-char eoh)
-                                                    (org-element-context))
-                                    while (memq (org-element-type subelem)
-                                                '(drawer planning property-drawer))
-                                    finally return (org-element-property :begin subelem)))
-                          (t (org-element-property :contents-begin element)))
+             for format = (anki-editor-entry-format)
+             ;; contents-begin includes drawers and scheduling data,
+             ;; which we'd like to ignore, here we skip these
+             ;; elements and reset contents-begin.
+             for begin = (cl-loop for eoh = (org-element-property :contents-begin element)
+                                  then (org-element-property :end subelem)
+                                  for subelem = (progn
+                                                  (goto-char eoh)
+                                                  (org-element-context))
+                                  while (memq (org-element-type subelem)
+                                              '(drawer planning property-drawer))
+                                  finally return (org-element-property :begin subelem))
              for end = (org-element-property :contents-end element)
              for raw = (or (and begin
                                 end
@@ -584,21 +659,7 @@ Return a list of cons of (FIELD-NAME . FIELD-CONTENT)."
                                  ;; scope is `tree'
                                  (min (point-max) end)))
                            "")
-             for content = (cond
-                            ((string= exporter anki-editor-exporter-raw)
-                             raw)
-                            ((string= exporter anki-editor-exporter-default)
-                             (or (org-export-string-as
-                                  raw
-                                  anki-editor--ox-anki-html-backend
-                                  t
-                                  anki-editor--ox-export-ext-plist)
-                                 ;; 8.2.10 version of
-                                 ;; `org-export-filter-apply-functions'
-                                 ;; returns nil for an input of empty string,
-                                 ;; which will cause AnkiConnect to fail
-                                 ""))
-                            (t (error "Invalid exporter: %s" exporter)))
+             for content = (anki-editor--export-string raw format)
              collect (cons heading content)
              ;; proceed to next field entry and check last-pt to
              ;; see if it's already the last entry
@@ -686,16 +747,18 @@ of that heading."
                  (length (anki-editor-map-note-entries t match scope))))
         (acc 0)
         (failed 0))
-    (anki-editor-map-note-entries
-     (lambda ()
-       (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
-                (cl-incf acc) total (buffer-name))
-       (anki-editor--clear-failure-reason)
-       (condition-case-unless-debug err
-           (anki-editor--push-note (anki-editor-note-at-point))
-         (error (cl-incf failed)
-                (anki-editor--set-failure-reason (error-message-string err)))))
-     match scope)
+
+    (anki-editor--with-collection-data-updated
+     (anki-editor-map-note-entries
+      (lambda ()
+        (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
+                 (cl-incf acc) total (buffer-name))
+        (anki-editor--clear-failure-reason)
+        (condition-case-unless-debug err
+            (anki-editor--push-note (anki-editor-note-at-point))
+          (error (cl-incf failed)
+                 (anki-editor--set-failure-reason (error-message-string err)))))
+      match scope))
 
     (message
      (cond
@@ -732,29 +795,22 @@ matching non-empty `ANKI_FAILURE_REASON' properties."
   "Insert a note interactively.
 
 Where the note subtree is placed depends on PREFIX, which is the
-same as how it is used by `M-RET'(org-insert-heading)."
-  (interactive "P")
-  (message "Fetching note types...")
-  (let* ((deck (or (org-entry-get-with-inheritance anki-editor-prop-deck)
-                   (progn
-                     (message "Fetching decks...")
-                     (completing-read "Choose a deck: "
-                                      (sort (anki-editor-deck-names) #'string-lessp)))))
-         (note-type (completing-read "Choose a note type: "
-                                     (sort (anki-editor-note-types) #'string-lessp)))
-         (fields (progn
-                   (message "Fetching note fields...")
-                   (anki-editor-api-call-result 'modelFieldNames
-                                                :modelName note-type)))
-         (note-heading (read-from-minibuffer "Enter the note heading (optional): ")))
+same as how it is used by `M-RET'(org-insert-heading).
 
+When note heading is not provided, it is used as the first field."
+  (interactive "P")
+  (let* ((deck (or (org-entry-get-with-inheritance anki-editor-prop-deck)
+                   (completing-read "Deck: " (sort (anki-editor-deck-names) #'string-lessp))))
+         (type (completing-read "Note type: " (sort (anki-editor-note-types) #'string-lessp)))
+         (fields (anki-editor-api-call-result 'modelFieldNames :modelName type))
+         (heading (read-from-minibuffer "Note heading (optional): ")))
     (anki-editor--insert-note-skeleton prefix
                                        deck
-                                       (if (string-blank-p note-heading)
-                                           "Item"
-                                         note-heading)
-                                       note-type
-                                       fields)))
+                                       heading
+                                       type
+                                       (if (string-blank-p heading)
+                                           (cdr fields)
+                                         fields))))
 
 (defun anki-editor-cloze-region (&optional arg hint)
   "Cloze region with number ARG."
