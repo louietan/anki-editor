@@ -713,6 +713,13 @@ Return a list of cons of (FIELD-NAME . FIELD-CONTENT)."
 
 ;;; Commands
 
+(defvar anki-editor--note-markers nil)
+
+(defun anki-editor--collect-note-marker ()
+  (message "Scanning notes %d (%s@%d), wait a moment..."
+           (length anki-editor--note-markers) (buffer-name) (point))
+  (push (point-marker) anki-editor--note-markers))
+
 (defun anki-editor-push-notes (&optional scope match)
   "Build notes from headings that match MATCH within SCOPE and push them to Anki.
 
@@ -741,32 +748,48 @@ of that heading."
                       ((equal current-prefix-arg '(16)) 'file)
                       ((equal current-prefix-arg '(64)) 'agenda)
                       (t nil))))
-
-  (let ((total (progn
-                 (message "Counting notes...")
-                 (length (anki-editor-map-note-entries t match scope))))
-        (acc 0)
-        (failed 0))
-
-    (anki-editor--with-collection-data-updated
-     (anki-editor-map-note-entries
-      (lambda ()
-        (message "[%d/%d] Processing notes in buffer \"%s\", wait a moment..."
-                 (cl-incf acc) total (buffer-name))
-        (anki-editor--clear-failure-reason)
-        (condition-case-unless-debug err
-            (anki-editor--push-note (anki-editor-note-at-point))
-          (error (cl-incf failed)
-                 (anki-editor--set-failure-reason (error-message-string err)))))
-      match scope))
-
-    (message
-     (cond
-      ((zerop total) "Nothing to push")
-      ((zerop failed) (format "Pushed %d notes to Anki successfully" acc))
-      (t (format "Pushed %d notes in total, among which %d were failed.  Check property drawers for failure reasons.
-When the issues are resolved, you could repush the failed ones with `anki-editor-retry-failed-notes'."
-                 acc failed))))))
+  (unwind-protect
+      (progn
+        (anki-editor-map-note-entries #'anki-editor--collect-note-marker match scope)
+        (setq anki-editor--note-markers (reverse anki-editor--note-markers))
+        (let ((count 0)
+              (failed 0))
+          (save-excursion
+            (anki-editor--with-collection-data-updated
+              (cl-loop with bar-width = 30
+                       for marker in anki-editor--note-markers
+                       for progress = (/ (float (cl-incf count)) (length anki-editor--note-markers))
+                       do
+                       (goto-char marker)
+                       (message "Uploading notes in buffer %s%s [%s%s] %d/%d (%.2f%%)"
+                                (marker-buffer marker)
+                                (if (zerop failed)
+                                    ""
+                                  (propertize (format " %d failed" failed)
+                                              'face `(:foreground "red")))
+                                (make-string (truncate (* bar-width progress)) ?#)
+                                (make-string (- bar-width (truncate (* bar-width progress))) ?.)
+                                count
+                                (length anki-editor--note-markers)
+                                (* 100 progress))
+                       (anki-editor--clear-failure-reason)
+                       (condition-case-unless-debug err
+                           (anki-editor--push-note (anki-editor-note-at-point))
+                         (error (cl-incf failed)
+                                (anki-editor--set-failure-reason (error-message-string err))))
+                       ;; free marker
+                       (set-marker marker nil))))
+          (message
+           (cond
+            ((zerop (length anki-editor--note-markers)) "Nothing to push")
+            ((zerop failed) (format "Successfully pushed %d notes to Anki" count))
+            (t (format "Pushed %d notes to Anki, with %d failed.  Check property drawers for details.
+When you have fixed those issues, try re-push the failed ones with `anki-editor-retry-failed-notes'."
+                       count failed))))))
+    ;; clean up markers
+    (cl-loop for m in anki-editor--note-markers
+             do (set-marker m nil)
+             finally do (setq anki-editor--note-markers nil))))
 
 (defun anki-editor-push-new-notes (&optional scope)
   "Push note entries without ANKI_NOTE_ID in SCOPE to Anki."
