@@ -17,8 +17,13 @@
    6. Added more utility commands/functions
    7. ~anki-editor-use-math-jax~ was replaced with
       ~anki-editor-latex-style~
-   8. Minor internal code refactoring
+   8. Code refactoring
    9. Allows to put one field in heading
+   10. Added options to copy custom head tags to card stylings
+       1. Variable ~anki-editor-include-default-style~
+       2. Variable ~anki-editor-html-head~
+       3. Command ~anki-editor-copy-styles~
+       4. Command ~anki-editor-remove-styles~
 
 ** v0.3.3
 
