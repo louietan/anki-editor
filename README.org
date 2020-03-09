@@ -137,6 +137,17 @@ there were any ambiguity or grammatical mistakes ;-)/
 
   [[./demo.gif]]
 
+* Donation
+
+  This package was a set of utilities in my personal =.emacs=, then I
+  thought it might be helpful to others, so I decided to make it a
+  package and share with you guys.  Since then I have been devoting
+  part of my free time to the maintenance of this package.
+
+  Donation is not required, but if you like my work and want to show
+  your appreciation you can donate via
+  [[https://paypal.me/louietanlei][PayPal]], every cent is
+  appreciated, thanks for your support :)
 
 [fn:1] It should be noted that Org only allows letters, numbers, =_=
 and =@= in a tag but Anki allows more, so you may have to edit you
