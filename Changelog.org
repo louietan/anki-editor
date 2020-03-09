@@ -24,6 +24,8 @@
        2. Variable ~anki-editor-html-head~
        3. Command ~anki-editor-copy-styles~
        4. Command ~anki-editor-remove-styles~
+   11. Updated anki-connect to version 6
+       1. ~anki-editor-api-upgrade~ removed
 
 ** v0.3.3
 

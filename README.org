@@ -73,7 +73,6 @@ there are any ambiguity or grammatical mistakes ;-)/
    | anki-editor-export-subtree-to-html | Export the subtree at point to HTML.                                                                                           |
    | anki-editor-convert-region-to-html | Convert and replace region to HTML.                                                                                            |
    | anki-editor-api-check              | Check if correct version of AnkiConnect is running.                                                                            |
-   | anki-editor-api-upgrade            | Upgrade AnkiConnect.                                                                                                           |
    | anki-editor-sync-collections       | Synchronize your local anki collection.                                                                                        |
    | anki-editor-gui-browse             | Open Anki Browser with a query for current note or deck.                                                                       |
    | anki-editor-gui-add-cards          | Open Anki Add Cards dialog with presets from current note entry.                                                               |

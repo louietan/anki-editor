@@ -121,7 +121,7 @@ For example, you can put custom styles or scripts in this variable."
 
 ;;; AnkiConnect
 
-(defconst anki-editor-api-version 5)
+(defconst anki-editor-api-version 6)
 
 (cl-defun anki-editor--fetch (url
                               &rest settings
@@ -897,21 +897,6 @@ When note heading is not provided, it is used as the first field."
           (message "AnkiConnect v.%d is running" ver))
       (error "anki-editor requires minimal version %d of AnkiConnect installed"
              anki-editor-api-version))))
-
-(defun anki-editor-api-upgrade ()
-  "Upgrade AnkiConnect to the latest version.
-
-This will display a confirmation dialog box in Anki asking if you
-want to continue.  The upgrading is done by downloading the latest
-code in the master branch of its Github repo.
-
-This is useful when new version of this package depends on the
-bugfixes or new features of AnkiConnect."
-  (interactive)
-  (when (yes-or-no-p "This is going to download the latest AnkiConnect from the Internet to your computer, do you want to continue? ")
-    (let ((result (anki-editor-api-call-result 'upgrade)))
-      (when (and (booleanp result) result)
-        (message "AnkiConnect has been upgraded, you might have to restart Anki for the changes to take effect.")))))
 
 (defun anki-editor-sync-collections ()
   "Synchronizes the local anki collections with ankiweb."
