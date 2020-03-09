@@ -90,6 +90,7 @@ there are any ambiguity or grammatical mistakes ;-)/
    | anki-editor-latex-style                       | builtin                | The style of latex to translate into.                                                                    |
    | anki-editor-include-default-style             | t                      | Wheter or not to include `org-html-style-default' when using `anki-editor-copy-styles'.                  |
    | anki-editor-html-head                         | nil                    | Additional html tags to append to card stylings when using `anki-editor-copy-styles'.                    |
+   | anki-editor-note-match                        | nil                    | Additional matching string for mapping through anki note headings.                                       |
 
 ** Functions and Macros
 

@@ -118,6 +118,11 @@ provide your custom styles in `anki-editor-html-head'."
 For example, you can put custom styles or scripts in this variable."
   :type 'string)
 
+(defcustom anki-editor-note-match nil
+  "Additional matching string for mapping through anki note headings.
+A leading logical operator like `+' or `&' is required."
+  :type 'string)
+
 
 ;;; AnkiConnect
 
@@ -451,12 +456,18 @@ as note types won't change in BODY."
          (setq anki-editor--collection-data-updated nil)))))
 
 (defun anki-editor-map-note-entries (func &optional match scope &rest skip)
-  "Simple wrapper that calls `org-map-entries' with
-  `&ANKI_NOTE_TYPE<>\"\"' appended to MATCH."
+  "Simple wrapper that calls `org-map-entries' with entries that match
+`ANKI_NOTE_TYPE<>\"\"', `anki-editor-note-match' and MATCH.
+A leading logical operator like `+' or `&' is required in MATCH."
   ;; disable property inheritance temporarily, or all subheadings of a
   ;; note heading will be counted as note headings as well
   (let ((org-use-property-inheritance nil))
-    (org-map-entries func (concat match "&" anki-editor-prop-note-type "<>\"\"") scope skip)))
+    (org-map-entries func
+                     (concat "+" anki-editor-prop-note-type "<>\"\""
+                             match
+                             anki-editor-note-match)
+                     scope
+                     skip)))
 
 (defun anki-editor--insert-note-skeleton (prefix deck heading type fields)
   "Insert a note subtree (skeleton) with HEADING, TYPE and FIELDS.

@@ -26,6 +26,8 @@
        4. Command ~anki-editor-remove-styles~
    11. Updated anki-connect to version 6
        1. ~anki-editor-api-upgrade~ removed
+   12. Added variable ~anki-editor-note-match~ to make matching note
+       entries customizable
 
 ** v0.3.3
 
