@@ -647,6 +647,30 @@ Where the subtree is created depends on PREFIX."
 	     (values (and value (split-string value))))
     (mapcar #'org-entry-restore-space values)))
 
+(defun anki-editor--build-field-from-content-at-point (name)
+  "Build a field with NAME entry from the heading at point."
+  (let* ((element (org-element-at-point))
+	 (format (anki-editor-entry-format))
+	 (begin (cl-loop for eoh = (org-element-property :contents-begin element)
+                                  then (org-element-property :end subelem)
+                                  for subelem = (progn
+                                                  (goto-char eoh)
+                                                  (org-element-context))
+                                  while (memq (org-element-type subelem)
+                                              '(drawer planning property-drawer))
+                                  finally return (org-element-property :begin subelem)))
+	 (end (org-element-property :contents-end element))
+	 (raw (or (and begin
+                                end
+                                (buffer-substring-no-properties
+                                 begin
+                                 ;; in case the buffer is narrowed,
+                                 ;; e.g. by `org-map-entries' when
+                                 ;; scope is `tree'
+                                 (min (point-max) end)))
+                           "")))
+    (cons name (anki-editor--export-string raw format))))
+
 (defun anki-editor--build-fields ()
   "Build a list of fields from subheadings of current heading.
 
@@ -654,7 +678,7 @@ Return a list of cons of (FIELD-NAME . FIELD-CONTENT)."
   (save-excursion
     (cl-loop with inhibit-message = t ; suppress echo message from `org-babel-exp-src-block'
              initially (unless (org-goto-first-child)
-                         (cl-return))
+                         (cl-return `(,(anki-editor--build-field-from-content-at-point "Back"))))
              for last-pt = (point)
              for element = (org-element-at-point)
              for heading = (substring-no-properties
