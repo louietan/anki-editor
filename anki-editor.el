@@ -557,34 +557,14 @@ Where the subtree is created depends on PREFIX."
       (when (org-goto-first-child)
         (while (/= point-of-last-child (point))
           (setq point-of-last-child (point))
-          (let* ((inhibit-message t)  ;; suppress echo message from `org-babel-exp-src-block'
+          (let* ((inhibit-message t) ;; suppress echo message from `org-babel-exp-src-block'
                  (field-heading (org-element-at-point))
                  (field-name (substring-no-properties
                               (org-element-property
                                :raw-value
-                               field-heading)))
-                 (contents-begin (org-element-property :contents-begin field-heading))
-                 (contents-end (org-element-property :contents-end field-heading)))
-
+                               field-heading))))
             (push (cons field-name
-                        (cond
-                         ((and contents-begin contents-end) (or (org-export-string-as
-                                                                 (buffer-substring
-                                                                  contents-begin
-                                                                  ;; in case the buffer is narrowed,
-                                                                  ;; e.g. by `org-map-entries' when
-                                                                  ;; scope is `tree'
-                                                                  (min (point-max) contents-end))
-                                                                 anki-editor--ox-anki-html-backend
-                                                                 t
-                                                                 anki-editor--ox-export-ext-plist)
-
-                                                                ;; 8.2.10 version of
-                                                                ;; `org-export-filter-apply-functions'
-                                                                ;; returns nil for an input of empty string,
-                                                                ;; which will cause AnkiConnect to fail
-                                                                ""))
-                         (t "")))
+                        (or (org-export-as anki-editor--ox-anki-html-backend t nil t anki-editor--ox-export-ext-plist) ""))
                   fields)
             (org-forward-heading-same-level nil t))))
       (reverse fields))))
