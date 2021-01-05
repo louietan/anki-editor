@@ -526,6 +526,9 @@ Where the subtree is created depends on PREFIX."
                     (cl-set-difference (anki-editor-note-tags note) :test 'string=)
                     (cl-set-difference anki-editor-protected-tags :test 'string=))))
     (anki-editor-api-with-multi
+     (anki-editor-api-enqueue 'changeDeck
+			      :cards (alist-get 'cards oldnote)
+			      :deck (anki-editor-note-deck note))
      (when tagsadd
        (anki-editor-api-enqueue 'addTags
                                 :notes (list (anki-editor-note-id note))
