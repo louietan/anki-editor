@@ -516,7 +516,7 @@ Where the subtree is created depends on PREFIX."
   "Request AnkiConnect for updating fields and tags of NOTE."
   (let* ((oldnote (caar (anki-editor-api-with-multi
                          (anki-editor-api-enqueue 'notesInfo
-                                                  :notes (list (anki-editor-note-id note)))
+                                                  :notes (list (string-to-number (anki-editor-note-id note))))
                          (anki-editor-api-enqueue 'updateNoteFields
                                                   :note (anki-editor-api--note note)))))
          (tagsadd (cl-set-difference (anki-editor-note-tags note)
@@ -528,11 +528,11 @@ Where the subtree is created depends on PREFIX."
     (anki-editor-api-with-multi
      (when tagsadd
        (anki-editor-api-enqueue 'addTags
-                                :notes (list (anki-editor-note-id note))
+                                :notes (list (string-to-number (anki-editor-note-id note)))
                                 :tags (mapconcat #'identity tagsadd " ")))
      (when tagsdel
        (anki-editor-api-enqueue 'removeTags
-                                :notes (list (anki-editor-note-id note))
+                                :notes (list (string-to-number (anki-editor-note-id note)))
                                 :tags (mapconcat #'identity tagsdel " "))))))
 
 (defun anki-editor--set-failure-reason (reason)
