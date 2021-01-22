@@ -354,7 +354,7 @@ The implementation is borrowed and simplified from ox-html."
             (org-html--format-image path attributes-plist info))
 
            ;; Audio file.
-           ((string-suffix-p ".mp3" path t)
+           ((or (string-suffix-p ".mp3" path t) (string-suffix-p ".wav" path t)
               (format "[sound:%s]" path))
 
            ;; External link with a description part.
