@@ -271,7 +271,7 @@ The result is the path to the newly stored media file."
 
 (defun anki-editor--wrap-latex-for-mathjax (content)
   "Wrap CONTENT for Anki's native MathJax support."
-  (format "<p>%s</p>" content))
+  (format "<p>\\[%s\\]</p>" content))
 
 (defun anki-editor--wrap-div (content)
   (format "<div>%s</div>" content))
