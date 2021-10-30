@@ -271,7 +271,7 @@ The result is the path to the newly stored media file."
 
 (defun anki-editor--wrap-latex-for-mathjax (content)
   "Wrap CONTENT for Anki's native MathJax support."
-  (format "<p>%s</p>" content))
+  (format "<p>\\[%s\\]</p>" content))
 
 (defun anki-editor--wrap-div (content)
   (format "<div>%s</div>" content))
@@ -300,9 +300,7 @@ CONTENTS is nil.  INFO is a plist holding contextual information."
           (pcase (org-element-type latex)
             ('latex-fragment (anki-editor--translate-latex-delimiters-to-anki-mathjax-delimiters code))
             ('latex-environment (anki-editor--wrap-latex-for-mathjax
-                                 (mapconcat #'anki-editor--wrap-div
-                                            (split-string (org-html-encode-plain-text code) "\n")
-                                            "")))))
+                                 (replace-regexp-in-string "\n" "<br>\n" code)))))
 
     (if anki-editor-break-consecutive-braces-in-latex
         (replace-regexp-in-string "}}" "} } " code)
