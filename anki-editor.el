@@ -549,6 +549,16 @@ Where the subtree is created depends on PREFIX."
 	     (values (and value (split-string value))))
     (mapcar #'org-entry-restore-space values)))
 
+(defun anki-editor--export-subtree ()
+  (let ((org-export-show-temporary-export-buffer nil)
+        (outbuf "*anki-editor-export*"))
+    (org-export-to-buffer
+        anki-editor--ox-anki-html-backend
+        outbuf nil t nil t
+        anki-editor--ox-export-ext-plist)
+    (with-current-buffer outbuf
+      (buffer-substring-no-properties (point-min) (point-max)))))
+
 (defun anki-editor--build-fields ()
   "Build a list of fields from subheadings of current heading, each
 element of which is a cons cell, the car of which is field name
@@ -565,30 +575,15 @@ and the cdr of which is field content."
                  (field-name (substring-no-properties
                               (org-element-property
                                :raw-value
-                               field-heading)))
-                 (contents-begin (org-element-property :contents-begin field-heading))
-                 (contents-end (org-element-property :contents-end field-heading)))
+                               field-heading))))
 
             (push (cons field-name
-                        (cond
-                         ((and contents-begin contents-end)
-                          (or (org-export-string-as
-                               (buffer-substring contents-begin
-                                                 ;; in case the buffer is
-                                                 ;; narrowed, e.g. by
-                                                 ;; `org-map-entries' when scope
-                                                 ;; is `tree'
-                                                 (min (point-max) contents-end))
-                               anki-editor--ox-anki-html-backend
-                               t
-                               anki-editor--ox-export-ext-plist)
-
-                              ;; 8.2.10 version of
-                              ;; `org-export-filter-apply-functions'
-                              ;; returns nil for an input of empty string,
-                              ;; which will cause AnkiConnect to fail
-                              ""))
-                         (t "")))
+                        (or (anki-editor--export-subtree)
+                            ;; 8.2.10 version of
+                            ;; `org-export-filter-apply-functions'
+                            ;; returns nil for an input of empty string,
+                            ;; which will cause AnkiConnect to fail
+                            ""))
                   fields)
             (org-forward-heading-same-level nil t))))
       (reverse fields))))
